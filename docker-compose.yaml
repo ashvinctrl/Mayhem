@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  chaos-orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - grafana
+      - prometheus
+    environment:
+      - ENV=development
+    networks:
+      - default
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./src:/app/src
+
+  grafana:
+    image: grafana/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - default
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./src/monitoring/grafana_dashboard_config.json:/etc/grafana/provisioning/dashboards/dashboard.json
+
+  prometheus:
+    image: prom/prometheus
+    networks:
+      - default
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus_config.yaml:/etc/prometheus/prometheus.yml
+
+  python:
+    image: python:3.9
+    working_dir: /app/src
+    command: >
+      bash -c "pip install -r requirements.txt && python app.py"
+    volumes:
+      - ./src:/app/src
+    depends_on:
+      - chaos-orchestrator
+      - grafana
+      - prometheus
+    networks:
+      - default
+
+networks:
+  default:
+    driver: bridge

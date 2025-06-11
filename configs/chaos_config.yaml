@@ -1,0 +1,83 @@
+fault_injection:
+  network:
+    enabled: true
+    latency_range: 
+      min: 100  # in milliseconds
+      max: 500  # in milliseconds
+    packet_loss_percentage: 5  # Simulate packet loss
+    bandwidth_limit: 10  # in Mbps
+  cpu:
+    enabled: true
+    load_percentage: 70
+    core_affinity: [0, 1]  # Target specific CPU cores
+  memory:
+    enabled: true
+    memory_limit: 512  # in MB
+    memory_leak_rate: 50  # in MB per second
+  disk:
+    enabled: true
+    disk_io_limit: 100  # in IOPS
+    disk_fill_percentage: 80  # Simulate disk space exhaustion
+  latency:
+    enabled: true
+    latency_range: 
+      min: 200  # in milliseconds
+      max: 1000  # in milliseconds
+
+scenario_generation:
+  max_scenarios: 20  # Increase the number of scenarios
+  scenario_evolution:
+    enabled: true
+    evolution_strategy: reinforcement_learning
+    exploration_rate: 0.2  # Exploration vs exploitation trade-off
+
+monitoring:
+  prometheus:
+    enabled: true
+    scrape_interval: 15s
+    metrics_path: /metrics
+    alerting_rules:
+      - alert: HighCPUUsage
+        expr: avg(rate(cpu_usage[1m])) > 80
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage has exceeded 80% for more than 1 minute."
+
+self_remediation:
+  enabled: true
+  remediation_timeout: 300  # in seconds
+  strategies:
+    - restart_service
+    - scale_up
+    - apply_hotfix
+
+logging:
+  enabled: true
+  log_level: debug  # Options: debug, info, warn, error
+  log_retention_days: 7
+
+security:
+  enabled: true
+  simulate_attacks:
+    - ddos
+    - sql_injection
+    - privilege_escalation
+
+custom_faults:
+  enabled: true
+  scripts_path: /custom_faults  # Path to user-defined fault injection scripts
+  examples:
+    - name: simulate_cache_eviction
+      description: "Simulates eviction of cache entries to test cache resilience."
+    - name: random_pod_termination
+      description: "Randomly terminates Kubernetes pods to test recovery."
+
+ai_tuning:
+  model_update_frequency: daily
+  training_data_retention: 30  # in days
+  feedback_loop:
+    enabled: true
+    user_feedback_weight: 0.3  # Weight of user feedback in model updates

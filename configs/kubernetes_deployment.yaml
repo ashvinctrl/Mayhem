@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: project-mayhem
+  labels:
+    app: project-mayhem
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: project-mayhem
+  template:
+    metadata:
+      labels:
+        app: project-mayhem
+    spec:
+      containers:
+      - name: chaos-orchestrator
+        image: project-mayhem:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+      - name: metrics-collector
+        image: project-mayhem-metrics:latest
+        ports:
+        - containerPort: 9090
+        env:
+        - name: PROMETHEUS_URL
+          value: "http://prometheus:9090"
