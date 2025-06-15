@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Mayhem UI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #181a1b; color: #f8f9fa; }
+        .mayhem-header { font-family: 'Comic Sans MS', cursive, sans-serif; color: #ff3860; }
+        .mayhem-card { background: #23272b; border-radius: 1rem; box-shadow: 0 0 20px #ff386033; }
+        .btn-mayhem { background: #ff3860; color: #fff; border: none; }
+        .btn-mayhem:hover { background: #ff1744; }
+    </style>
+</head>
+<body>
+<div class="container py-5">
+    <h1 class="mayhem-header text-center mb-4">Project Mayhem: Chaos Engineering UI</h1>
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="mayhem-card p-4 mb-3">
+                <h4>Orchestrator Health</h4>
+                <div id="health-status">Loading...</div>
+            </div>
+            <div class="mayhem-card p-4">
+                <h4>Metrics</h4>
+                <pre id="metrics" style="color:#00e676; background:#181a1b;">Loading...</pre>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="mayhem-card p-4">
+                <h4>Available Chaos Scenarios</h4>
+                <ul id="scenarios" class="list-group mb-3"></ul>
+                <form id="inject-form">
+                    <div class="mb-3">
+                        <label for="scenario" class="form-label">Scenario</label>
+                        <select id="scenario" class="form-select" required></select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="duration" class="form-label">Duration (seconds)</label>
+                        <input type="number" id="duration" class="form-control" value="5" min="1" required>
+                    </div>
+                    <button type="submit" class="btn btn-mayhem w-100">Inject Chaos!</button>
+                </form>
+                <div id="inject-result" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+    <footer class="text-center mt-5">
+        <small>"If you can read this, the orchestrator hasn't crashed... yet."</small>
+    </footer>
+</div>
+<script>
+// Fetch health
+fetch('/health').then(r=>r.json()).then(d=>{
+    document.getElementById('health-status').innerText = d.status;
+});
+// Fetch metrics
+fetch('/metrics').then(r=>r.text()).then(d=>{
+    document.getElementById('metrics').innerText = d;
+});
+// Fetch scenarios
+fetch('/scenarios').then(r=>r.json()).then(d=>{
+    const ul = document.getElementById('scenarios');
+    const select = document.getElementById('scenario');
+    ul.innerHTML = '';
+    select.innerHTML = '';
+    (d.scenarios||[]).forEach(s => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item bg-dark text-light';
+        li.innerText = s;
+        ul.appendChild(li);
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.innerText = s;
+        select.appendChild(opt);
+    });
+});
+// Inject chaos
+const form = document.getElementById('inject-form');
+form.onsubmit = function(e) {
+    e.preventDefault();
+    const scenario = document.getElementById('scenario').value;
+    const duration = document.getElementById('duration').value;
+    fetch('/inject', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({scenario, duration})
+    })
+    .then(r=>r.json())
+    .then(d=>{
+        document.getElementById('inject-result').innerHTML = `<div class='alert alert-success'>${d.result}</div>`;
+    })
+    .catch(()=>{
+        document.getElementById('inject-result').innerHTML = `<div class='alert alert-danger'>Failed to inject chaos!</div>`;
+    });
+}
+</script>
+</body>
+</html>

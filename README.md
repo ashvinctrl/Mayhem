@@ -31,6 +31,7 @@ Welcome to Project Mayhem, the only platform where breaking your own stuff is no
 - **CI/CD Pipelines**: Because chaos waits for no one.
 
 
+
 ## Getting Started (Release the Mayhem)
 
 1. **Clone the Repository**
@@ -59,6 +60,16 @@ Welcome to Project Mayhem, the only platform where breaking your own stuff is no
    ```sh
    ./scripts/run_tests.sh
    ```
+
+5. **Open the Beautiful Chaos UI**
+   - Once the orchestrator is running, open your browser and go to:
+     - [http://localhost:5000/](http://localhost:5000/) or [http://localhost:5000/ui](http://localhost:5000/ui)
+   - Here you can:
+     - View orchestrator health and live metrics
+     - List and inject chaos scenarios with a click
+     - Enjoy a modern, humorous interface
+
+**Note:** The UI is served directly from the orchestrator Flask app. No extra setup needed!
 
 
 ## Contribution

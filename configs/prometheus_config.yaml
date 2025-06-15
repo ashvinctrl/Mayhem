@@ -1,22 +1,10 @@
 global:
-  scrape_interval: 15s
+  scrape_interval: 5s
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'chaos_engineering'
+  - job_name: 'chaos-orchestrator'
     static_configs:
-      - targets: ['chaos-orchestrator:5000']  # Replace with your application's metrics endpoint
+      - targets: ['chaos-orchestrator:5000']
     metrics_path: '/metrics'
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'chaos_engineering_instance'  # Customize as needed
-
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets:
-            - 'localhost:9093'  # Replace with your Alertmanager instance
-
-rule_files:
-  - 'alert_rules/*.yaml'  # Path to your alerting rules files
+    scrape_interval: 5s
