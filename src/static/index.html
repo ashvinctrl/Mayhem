@@ -3,98 +3,572 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Mayhem UI</title>
+    <title>Chaos Engineering Platform</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { background: #181a1b; color: #f8f9fa; }
-        .mayhem-header { font-family: 'Comic Sans MS', cursive, sans-serif; color: #ff3860; }
-        .mayhem-card { background: #23272b; border-radius: 1rem; box-shadow: 0 0 20px #ff386033; }
-        .btn-mayhem { background: #ff3860; color: #fff; border: none; }
-        .btn-mayhem:hover { background: #ff1744; }
+        :root {
+            --primary-blue: #2563eb;
+            --secondary-blue: #1e40af;
+            --success-green: #059669;
+            --warning-orange: #d97706;
+            --danger-red: #dc2626;
+            --dark-bg: #0f172a;
+            --card-bg: #1e293b;
+            --border-color: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+        }
+        
+        body { 
+            background: linear-gradient(135deg, var(--dark-bg) 0%, #1a202c 100%);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+        }
+        
+        .main-header {
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .chaos-card { 
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .chaos-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 15px -3px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn-primary-custom { 
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-blue) 100%);
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            padding: 10px 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary-custom:hover { 
+            background: linear-gradient(135deg, var(--secondary-blue) 0%, #1d4ed8 100%);
+            transform: translateY(-1px);
+        }
+        
+        .btn-danger-custom {
+            background: linear-gradient(135deg, var(--danger-red) 0%, #b91c1c 100%);
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            padding: 10px 20px;
+        }
+        
+        .btn-success-custom {
+            background: linear-gradient(135deg, var(--success-green) 0%, #047857 100%);
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            padding: 10px 20px;
+        }
+        
+        .scenario-badge {
+            background: var(--primary-blue);
+            color: white;
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .status-healthy { background: var(--success-green); }
+        .status-warning { background: var(--warning-orange); }
+        .status-critical { background: var(--danger-red); }
+        
+        .metric-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .metric-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        
+        .form-control-dark {
+            background: var(--dark-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 8px;
+        }
+        
+        .form-control-dark:focus {
+            background: var(--dark-bg);
+            border-color: var(--primary-blue);
+            color: var(--text-primary);
+            box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.25);
+        }
+        
+        .form-select-dark {
+            background: var(--dark-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 8px;
+        }
+        
+        .alert-custom {
+            border: none;
+            border-radius: 8px;
+            border-left: 4px solid var(--success-green);
+        }
+        
+        .sidebar {
+            background: var(--card-bg);
+            border-right: 1px solid var(--border-color);
+            min-height: calc(100vh - 60px);
+        }
+        
+        .nav-link-custom {
+            color: var(--text-secondary);
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 4px 0;
+            transition: all 0.2s ease;
+        }
+        
+        .nav-link-custom:hover, .nav-link-custom.active {
+            background: var(--primary-blue);
+            color: white;
+        }
     </style>
 </head>
 <body>
-<div class="container py-5">
-    <h1 class="mayhem-header text-center mb-4">Project Mayhem: Chaos Engineering UI</h1>
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="mayhem-card p-4 mb-3">
-                <h4>Orchestrator Health</h4>
-                <div id="health-status">Loading...</div>
-            </div>
-            <div class="mayhem-card p-4">
-                <h4>Metrics</h4>
-                <pre id="metrics" style="color:#00e676; background:#181a1b;">Loading...</pre>
-            </div>
+<!-- Header -->
+<nav class="navbar navbar-expand-lg main-header">
+    <div class="container-fluid">
+        <a class="navbar-brand text-white fw-bold">
+            <i class="bi bi-lightning-charge-fill me-2"></i>
+            Chaos Engineering Platform
+        </a>
+        <div class="d-flex align-items-center">
+            <span class="status-indicator status-healthy"></span>
+            <span class="text-success">System Online</span>
         </div>
-        <div class="col-md-6">
-            <div class="mayhem-card p-4">
-                <h4>Available Chaos Scenarios</h4>
-                <ul id="scenarios" class="list-group mb-3"></ul>
-                <form id="inject-form">
-                    <div class="mb-3">
-                        <label for="scenario" class="form-label">Scenario</label>
-                        <select id="scenario" class="form-select" required></select>
+    </div>
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-2 sidebar p-3">
+            <nav class="nav flex-column">
+                <a class="nav-link nav-link-custom active" href="#" onclick="showTab('dashboard')">
+                    <i class="bi bi-speedometer2 me-2"></i>Dashboard
+                </a>
+                <a class="nav-link nav-link-custom" href="#" onclick="showTab('scenarios')">
+                    <i class="bi bi-lightning me-2"></i>Chaos Scenarios
+                </a>
+                <a class="nav-link nav-link-custom" href="#" onclick="showTab('monitoring')">
+                    <i class="bi bi-graph-up me-2"></i>Monitoring
+                </a>
+                <a class="nav-link nav-link-custom" href="#" onclick="showTab('logs')">
+                    <i class="bi bi-file-text me-2"></i>Logs
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-10 p-4">
+            <!-- Dashboard Tab -->
+            <div id="dashboard-tab" class="tab-content">
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <h2 class="text-white mb-4">
+                            <i class="bi bi-speedometer2 me-2"></i>System Dashboard
+                        </h2>
                     </div>
-                    <div class="mb-3">
-                        <label for="duration" class="form-label">Duration (seconds)</label>
-                        <input type="number" id="duration" class="form-control" value="5" min="1" required>
+                </div>
+                
+                <!-- Metrics Row -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="metric-card text-center">
+                            <div class="metric-value" id="health-status">Loading...</div>
+                            <div class="metric-label">System Health</div>
+                        </div>
                     </div>
-                    <button type="submit" class="btn btn-mayhem w-100">Inject Chaos!</button>
-                </form>
-                <div id="inject-result" class="mt-3"></div>
+                    <div class="col-md-3">
+                        <div class="metric-card text-center">
+                            <div class="metric-value text-warning" id="cpu-usage">0%</div>
+                            <div class="metric-label">CPU Usage</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card text-center">
+                            <div class="metric-value text-info" id="memory-usage">0%</div>
+                            <div class="metric-label">Memory Usage</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card text-center">
+                            <div class="metric-value text-success" id="chaos-count">0</div>
+                            <div class="metric-label">Chaos Injections</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Metrics -->
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="chaos-card p-4">
+                            <h5 class="text-white mb-3">
+                                <i class="bi bi-activity me-2"></i>Live System Metrics
+                            </h5>
+                            <pre id="metrics" style="background: var(--dark-bg); color: #00ff88; border-radius: 8px; padding: 1rem; max-height: 300px; overflow-y: auto;">Loading metrics...</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scenarios Tab -->
+            <div id="scenarios-tab" class="tab-content" style="display: none;">
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <h2 class="text-white mb-4">
+                            <i class="bi bi-lightning me-2"></i>Chaos Scenarios
+                        </h2>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <!-- Available Scenarios -->
+                    <div class="col-md-6">
+                        <div class="chaos-card p-4 mb-4">
+                            <h5 class="text-white mb-3">
+                                <i class="bi bi-list-ul me-2"></i>Available Scenarios
+                            </h5>
+                            <div id="scenarios-list" class="mb-3"></div>
+                        </div>
+                    </div>
+
+                    <!-- Chaos Injection Panel -->
+                    <div class="col-md-6">
+                        <div class="chaos-card p-4">
+                            <h5 class="text-white mb-3">
+                                <i class="bi bi-lightning-charge me-2"></i>Execute Chaos
+                            </h5>
+                            <form id="inject-form">
+                                <div class="mb-3">
+                                    <label for="scenario" class="form-label text-white">
+                                        <i class="bi bi-gear me-2"></i>Scenario Type
+                                    </label>
+                                    <select id="scenario" class="form-select form-select-dark" required>
+                                        <option value="">Select a scenario...</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="duration" class="form-label text-white">
+                                        <i class="bi bi-clock me-2"></i>Duration (seconds)
+                                    </label>
+                                    <input type="number" id="duration" class="form-control form-control-dark" value="10" min="1" max="300" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="intensity" class="form-label text-white">
+                                        <i class="bi bi-speedometer me-2"></i>Intensity Level
+                                    </label>
+                                    <select id="intensity" class="form-select form-select-dark">
+                                        <option value="low">Low Impact</option>
+                                        <option value="medium" selected>Medium Impact</option>
+                                        <option value="high">High Impact</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-danger-custom w-100">
+                                    <i class="bi bi-lightning-charge-fill me-2"></i>Execute Chaos Injection
+                                </button>
+                            </form>
+                            <div id="inject-result" class="mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Monitoring Tab -->
+            <div id="monitoring-tab" class="tab-content" style="display: none;">
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <h2 class="text-white mb-4">
+                            <i class="bi bi-graph-up me-2"></i>Real-time Monitoring
+                        </h2>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="chaos-card p-4">
+                            <h5 class="text-white mb-3">Grafana Dashboard</h5>
+                            <p class="text-secondary mb-3">Access advanced monitoring and visualization at:</p>
+                            <a href="http://localhost:3000" target="_blank" class="btn btn-success-custom">
+                                <i class="bi bi-graph-up-arrow me-2"></i>Open Grafana Dashboard
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Tab -->
+            <div id="logs-tab" class="tab-content" style="display: none;">
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <h2 class="text-white mb-4">
+                            <i class="bi bi-file-text me-2"></i>System Logs
+                        </h2>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="chaos-card p-4">
+                            <h5 class="text-white mb-3">Recent Activity</h5>
+                            <div id="logs-container" style="background: var(--dark-bg); border-radius: 8px; padding: 1rem; height: 400px; overflow-y: auto; font-family: monospace;">
+                                <div class="text-success">[INFO] System initialized successfully</div>
+                                <div class="text-info">[DEBUG] Prometheus metrics endpoint active</div>
+                                <div class="text-warning">[WARN] Ready for chaos injection</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-    <footer class="text-center mt-5">
-        <small>"If you can read this, the orchestrator hasn't crashed... yet."</small>
-    </footer>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// Fetch health
-fetch('/health').then(r=>r.json()).then(d=>{
-    document.getElementById('health-status').innerText = d.status;
-});
-// Fetch metrics
-fetch('/metrics').then(r=>r.text()).then(d=>{
-    document.getElementById('metrics').innerText = d;
-});
-// Fetch scenarios
-fetch('/scenarios').then(r=>r.json()).then(d=>{
-    const ul = document.getElementById('scenarios');
-    const select = document.getElementById('scenario');
-    ul.innerHTML = '';
-    select.innerHTML = '';
-    (d.scenarios||[]).forEach(s => {
-        const li = document.createElement('li');
-        li.className = 'list-group-item bg-dark text-light';
-        li.innerText = s;
-        ul.appendChild(li);
-        const opt = document.createElement('option');
-        opt.value = s;
-        opt.innerText = s;
-        select.appendChild(opt);
+// Tab management
+function showTab(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.style.display = 'none';
     });
-});
-// Inject chaos
+    
+    // Remove active class from all nav links
+    document.querySelectorAll('.nav-link-custom').forEach(link => {
+        link.classList.remove('active');
+    });
+    
+    // Show selected tab
+    document.getElementById(tabName + '-tab').style.display = 'block';
+    
+    // Add active class to clicked nav link
+    event.target.classList.add('active');
+}
+
+// Enhanced metrics tracking
+let metricsData = {
+    cpuUsage: 0,
+    memoryUsage: 0,
+    chaosCount: 0,
+    lastUpdate: new Date()
+};
+
+// Fetch and display health status
+function updateHealth() {
+    fetch('/health')
+        .then(r => r.json())
+        .then(d => {
+            document.getElementById('health-status').innerHTML = `
+                <span class="status-indicator status-healthy"></span>
+                ${d.status}
+            `;
+        })
+        .catch(() => {
+            document.getElementById('health-status').innerHTML = `
+                <span class="status-indicator status-critical"></span>
+                Disconnected
+            `;
+        });
+}
+
+// Fetch and parse metrics
+function updateMetrics() {
+    fetch('/metrics')
+        .then(r => r.text())
+        .then(d => {
+            document.getElementById('metrics').textContent = d;
+            
+            // Parse CPU and memory from metrics
+            const cpuMatch = d.match(/system_cpu_percent\s+([\d.]+)/);
+            const memMatch = d.match(/system_memory_percent\s+([\d.]+)/);
+            const chaosMatch = d.match(/chaos_requests_total\s+([\d.]+)/);
+            
+            if (cpuMatch) {
+                metricsData.cpuUsage = parseFloat(cpuMatch[1]);
+                document.getElementById('cpu-usage').textContent = metricsData.cpuUsage.toFixed(1) + '%';
+            }
+            
+            if (memMatch) {
+                metricsData.memoryUsage = parseFloat(memMatch[1]);
+                document.getElementById('memory-usage').textContent = metricsData.memoryUsage.toFixed(1) + '%';
+            }
+            
+            if (chaosMatch) {
+                metricsData.chaosCount = parseInt(chaosMatch[1]);
+                document.getElementById('chaos-count').textContent = metricsData.chaosCount;
+            }
+        })
+        .catch(e => {
+            document.getElementById('metrics').textContent = 'Error loading metrics: ' + e.message;
+        });
+}
+
+// Fetch available scenarios
+function updateScenarios() {
+    fetch('/scenarios')
+        .then(r => r.json())
+        .then(d => {
+            const list = document.getElementById('scenarios-list');
+            const select = document.getElementById('scenario');
+            
+            list.innerHTML = '';
+            select.innerHTML = '<option value="">Select a scenario...</option>';
+            
+            const scenarios = d.scenarios || [];
+            scenarios.forEach(s => {
+                // Add to list display
+                const badge = document.createElement('div');
+                badge.className = 'scenario-badge mb-2';
+                badge.innerHTML = `<i class="bi bi-lightning-charge me-2"></i>${s}`;
+                list.appendChild(badge);
+                
+                // Add to select dropdown
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                select.appendChild(opt);
+            });
+        })
+        .catch(e => {
+            document.getElementById('scenarios-list').innerHTML = 
+                '<div class="text-danger">Error loading scenarios</div>';
+        });
+}
+
+// Enhanced chaos injection
 const form = document.getElementById('inject-form');
 form.onsubmit = function(e) {
     e.preventDefault();
+    
     const scenario = document.getElementById('scenario').value;
     const duration = document.getElementById('duration').value;
+    const intensity = document.getElementById('intensity').value;
+    
+    if (!scenario) {
+        showAlert('Please select a scenario', 'warning');
+        return;
+    }
+    
+    // Show loading state
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Executing...';
+    submitBtn.disabled = true;
+    
+    // Add log entry
+    addLogEntry(`Executing ${scenario} for ${duration}s at ${intensity} intensity`, 'warning');
+    
     fetch('/inject', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({scenario, duration})
+        body: JSON.stringify({scenario, duration: parseInt(duration), intensity})
     })
-    .then(r=>r.json())
-    .then(d=>{
-        document.getElementById('inject-result').innerHTML = `<div class='alert alert-success'>${d.result}</div>`;
+    .then(r => r.json())
+    .then(d => {
+        showAlert(`✅ ${d.result}`, 'success');
+        addLogEntry(`Chaos injection completed: ${d.result}`, 'success');
+        
+        // Reset form
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
     })
-    .catch(()=>{
-        document.getElementById('inject-result').innerHTML = `<div class='alert alert-danger'>Failed to inject chaos!</div>`;
+    .catch(e => {
+        showAlert(`❌ Failed to inject chaos: ${e.message}`, 'danger');
+        addLogEntry(`Chaos injection failed: ${e.message}`, 'danger');
+        
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
     });
 }
+
+// Helper functions
+function showAlert(message, type) {
+    const resultDiv = document.getElementById('inject-result');
+    resultDiv.innerHTML = `
+        <div class="alert alert-${type} alert-custom alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        const alert = resultDiv.querySelector('.alert');
+        if (alert) {
+            alert.remove();
+        }
+    }, 5000);
+}
+
+function addLogEntry(message, type) {
+    const logsContainer = document.getElementById('logs-container');
+    const timestamp = new Date().toLocaleTimeString();
+    const typeClass = {
+        'success': 'text-success',
+        'warning': 'text-warning',
+        'danger': 'text-danger',
+        'info': 'text-info'
+    }[type] || 'text-white';
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = typeClass;
+    logEntry.textContent = `[${timestamp}] ${message}`;
+    
+    logsContainer.appendChild(logEntry);
+    logsContainer.scrollTop = logsContainer.scrollHeight;
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    updateHealth();
+    updateMetrics();
+    updateScenarios();
+    
+    // Auto-refresh data
+    setInterval(updateHealth, 10000);   // Every 10 seconds
+    setInterval(updateMetrics, 5000);   // Every 5 seconds
+    setInterval(updateScenarios, 30000); // Every 30 seconds
+    
+    addLogEntry('Chaos Engineering Platform initialized', 'info');
+});
 </script>
 </body>
 </html>
