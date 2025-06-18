@@ -5,3 +5,4 @@ numpy==1.24.3
 pandas==1.5.3
 prometheus-client==0.15.0
 grafanalib==0.7.0
+psutil==5.9.8

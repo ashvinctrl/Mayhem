@@ -1,0 +1,198 @@
+# Production deployment configuration for Project Mayhem
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chaos-orchestrator
+  namespace: chaos-engineering
+  labels:
+    app: chaos-orchestrator
+    version: v1.0.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: chaos-orchestrator
+  template:
+    metadata:
+      labels:
+        app: chaos-orchestrator
+        version: v1.0.0
+    spec:
+      containers:
+      - name: chaos-orchestrator
+        image: chaos-orchestrator:latest
+        ports:
+        - containerPort: 5000
+          name: http
+        env:
+        - name: ENV
+          value: "production"
+        - name: FLASK_ENV
+          value: "production"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: chaos-secrets
+              key: database-url
+        - name: CHAOS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chaos-secrets
+              key: api-key
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chaos-secrets
+              key: flask-secret-key
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: data-volume
+          mountPath: /app/data
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: chaos-data-pvc
+      serviceAccountName: chaos-orchestrator-sa
+      securityContext:
+        fsGroup: 1000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chaos-orchestrator-service
+  namespace: chaos-engineering
+  labels:
+    app: chaos-orchestrator
+spec:
+  selector:
+    app: chaos-orchestrator
+  ports:
+  - port: 80
+    targetPort: 5000
+    protocol: TCP
+    name: http
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: chaos-secrets
+  namespace: chaos-engineering
+type: Opaque
+data:
+  # Base64 encoded values - replace with actual encoded secrets
+  database-url: c3FsaXRlOi8vL2FwcC9kYXRhL2NoYW9zX3BsYXRmb3JtLmRi  # sqlite:///app/data/chaos_platform.db
+  api-key: Y2hhb3NfYXBpX2tleV9wcm9kdWN0aW9uXzIwMjU=  # chaos_api_key_production_2025
+  flask-secret-key: c2VjdXJlX2ZsYXNrX3NlY3JldF9rZXlfMjAyNQ==  # secure_flask_secret_key_2025
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chaos-orchestrator-sa
+  namespace: chaos-engineering
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chaos-orchestrator-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "nodes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chaos-orchestrator-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chaos-orchestrator-role
+subjects:
+- kind: ServiceAccount
+  name: chaos-orchestrator-sa
+  namespace: chaos-engineering
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chaos-data-pvc
+  namespace: chaos-engineering
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: fast-ssd
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chaos-orchestrator-ingress
+  namespace: chaos-engineering
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+spec:
+  tls:
+  - hosts:
+    - chaos.yourdomain.com
+    secretName: chaos-orchestrator-tls
+  rules:
+  - host: chaos.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: chaos-orchestrator-service
+            port:
+              number: 80

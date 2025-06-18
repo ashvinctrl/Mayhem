@@ -9,18 +9,31 @@ services:
       - grafana
       - prometheus
     environment:
-      - ENV=development
+      - ENV=production
+      - FLASK_ENV=production
+      - GRAFANA_PASSWORD=${GRAFANA_PASSWORD:-secure_admin_password_2025}
+      - CHAOS_API_KEY=${CHAOS_API_KEY:-chaos_api_key_2025}
     networks:
       - default
     ports:
       - "5000:5000"
     volumes:
       - ./src:/app/src
+      - chaos_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   grafana:
-    image: grafana/grafana
+    image: grafana/grafana:latest
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-secure_admin_password_2025}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SECURITY_DISABLE_GRAVATAR=true
     networks:
       - default
     ports:
@@ -28,6 +41,7 @@ services:
     volumes:
       - ./src/monitoring/grafana_dashboards/:/etc/grafana/provisioning/dashboards/
       - ./src/monitoring/grafana_dashboards/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - grafana_data:/var/lib/grafana
 
   prometheus:
     image: prom/prometheus
@@ -37,21 +51,23 @@ services:
       - "9090:9090"
     volumes:
       - ./configs/prometheus_config.yaml:/etc/prometheus/prometheus.yml
-
-  python:
-    image: python:3.9
-    working_dir: /app/src
-    command: >
-      bash -c "pip install -r requirements.txt && python app.py"
-    volumes:
-      - ./src:/app/src
-    depends_on:
-      - chaos-orchestrator
-      - grafana
-      - prometheus
-    networks:
-      - default
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
 
 networks:
   default:
     driver: bridge
+
+volumes:
+  grafana_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  chaos_data:
+    driver: local

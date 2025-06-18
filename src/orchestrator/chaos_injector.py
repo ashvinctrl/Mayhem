@@ -4,9 +4,53 @@ import random
 import psutil
 import threading
 import time
-
 import os
+import logging
+import json
+from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Import our custom modules
+try:
+    from utils.security import SecurityManager, validate_chaos_input, sanitize_log_data
+    from models.database import db, init_database, ChaosExperiment, SystemMetrics
+    from ai_models.nlp_log_analysis import NLPLogAnalyzer
+except ImportError as e:
+    print(f"Warning: Some modules not available: {e}")
+    # Fallback for development
+    class SecurityManager:
+        def require_api_key(self, f): return f
+        def rate_limit(self, requests_per_minute=60): return lambda f: f
+    
+    def validate_chaos_input(data): return True, "Valid"
+
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO')),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), '../static'), static_url_path='/static')
+
+# Configure Flask app
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_secret_key_2025')
+
+# Initialize security
+security = SecurityManager()
+
+# Initialize database
+try:
+    init_database(app)
+    logger.info("Database initialized successfully")
+except Exception as e:
+    logger.error(f"Database initialization failed: {e}")
+
+# Initialize AI analyzer
+ai_analyzer = NLPLogAnalyzer()
 
 # Prometheus metrics - unique names to avoid conflicts
 CPU_USAGE = Gauge('system_cpu_percent', 'Current CPU usage percentage')
@@ -45,11 +89,45 @@ def ui():
 from flask import request
 
 @app.route("/inject", methods=["POST"])
+@security.require_api_key
+@security.rate_limit(requests_per_minute=30)
 def inject():
     data = request.get_json(force=True)
+    
+    # Validate input
+    is_valid, error_message = validate_chaos_input(data)
+    if not is_valid:
+        logger.warning(f"Invalid chaos input: {error_message}")
+        return jsonify({'error': error_message}), 400
+    
     scenario = data.get("scenario", "cpu_spike")
     duration = int(data.get("duration", 10))
     intensity = data.get("intensity", "medium")
+    
+    # Create experiment record
+    experiment = None
+    try:
+        # Get current metrics before chaos
+        current_metrics = {
+            'cpu_percent': psutil.cpu_percent(),
+            'memory_percent': psutil.virtual_memory().percent,
+            'disk_percent': psutil.disk_usage('/').percent if os.name != 'nt' else psutil.disk_usage('C:').percent
+        }
+        
+        experiment = ChaosExperiment(
+            scenario=scenario,
+            duration=duration,
+            intensity=intensity,
+            metrics_before=json.dumps(current_metrics),
+            user_agent=request.headers.get('User-Agent', ''),
+            client_ip=request.remote_addr
+        )
+        db.session.add(experiment)
+        db.session.commit()
+        
+        logger.info(f"Starting chaos experiment {experiment.id}: {scenario} ({intensity}) for {duration}s")
+    except Exception as e:
+        logger.error(f"Failed to create experiment record: {e}")
     
     # Increment chaos injection counter
     CHAOS_INJECTIONS_COUNT.inc()
