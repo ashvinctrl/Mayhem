@@ -14,18 +14,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import our custom modules
-try:
-    from utils.security import SecurityManager, validate_chaos_input, sanitize_log_data
-    from models.database import db, init_database, ChaosExperiment, SystemMetrics
-    from ai_models.nlp_log_analysis import NLPLogAnalyzer
-except ImportError as e:
-    print(f"Warning: Some modules not available: {e}")
-    # Fallback for development
-    class SecurityManager:
-        def require_api_key(self, f): return f
-        def rate_limit(self, requests_per_minute=60): return lambda f: f
-    
-    def validate_chaos_input(data): return True, "Valid"
+from utils.security import SecurityManager, validate_chaos_input, sanitize_log_data
+from models.database import db, init_database, ChaosExperiment, SystemMetrics
+from ai_models.nlp_log_analysis import NLPLogAnalyzer
 
 # Configure logging
 logging.basicConfig(
@@ -50,7 +41,11 @@ except Exception as e:
     logger.error(f"Database initialization failed: {e}")
 
 # Initialize AI analyzer
-ai_analyzer = NLPLogAnalyzer()
+try:
+    ai_analyzer = NLPLogAnalyzer()
+except Exception as e:
+    logger.warning(f"AI analyzer not available: {e}")
+    ai_analyzer = None
 
 # Prometheus metrics - unique names to avoid conflicts
 CPU_USAGE = Gauge('system_cpu_percent', 'Current CPU usage percentage')
@@ -144,7 +139,7 @@ def inject():
                     pass
             threads = [threading.Thread(target=burn) for _ in range(thread_count)]
             for t in threads: t.start()
-            for t in threads: t.join()
+            for t in threads: t.join()   
         threading.Thread(target=cpu_stress).start()
         result = {"result": f"CPU spike ({intensity}) injected for {duration}s", "scenario": scenario}
     
