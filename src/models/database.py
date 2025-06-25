@@ -1,13 +1,22 @@
 import os
+import logging
 from datetime import datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError, OperationalError
 import json
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 db = SQLAlchemy()
 
 class ChaosExperiment(db.Model):
-    """Model for storing chaos experiment results"""
+    """Model for storing chaos experiment results with enhanced error handling"""
     __tablename__ = 'chaos_experiments'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -25,21 +34,42 @@ class ChaosExperiment(db.Model):
     client_ip = db.Column(db.String(45))
     
     def to_dict(self):
-        return {
-            'id': self.id,
-            'scenario': self.scenario,
-            'duration': self.duration,
-            'intensity': self.intensity,
-            'status': self.status,
-            'start_time': self.start_time.isoformat() if self.start_time else None,
-            'end_time': self.end_time.isoformat() if self.end_time else None,
-            'result': self.result,
-            'metrics_before': json.loads(self.metrics_before) if self.metrics_before else None,
-            'metrics_after': json.loads(self.metrics_after) if self.metrics_after else None,
-            'error_message': self.error_message,
-            'user_agent': self.user_agent,
-            'client_ip': self.client_ip
-        }
+        """Convert experiment to dictionary with error handling"""
+        try:
+            return {
+                'id': self.id,
+                'scenario': self.scenario,
+                'duration': self.duration,
+                'intensity': self.intensity,
+                'status': self.status,
+                'start_time': self.start_time.isoformat() if self.start_time else None,
+                'end_time': self.end_time.isoformat() if self.end_time else None,
+                'result': self.result,
+                'metrics_before': self._safe_json_loads(self.metrics_before),
+                'metrics_after': self._safe_json_loads(self.metrics_after),
+                'error_message': self.error_message,
+                'user_agent': self.user_agent,
+                'client_ip': self.client_ip
+            }
+        except Exception as e:
+            logger.error(f"Error converting ChaosExperiment {self.id} to dict: {e}")
+            # Return minimal safe dictionary
+            return {
+                'id': self.id,
+                'scenario': self.scenario or 'unknown',
+                'status': self.status or 'unknown',
+                'error': f'Conversion error: {str(e)}'
+            }
+    
+    def _safe_json_loads(self, json_str):
+        """Safely load JSON string with error handling"""
+        if not json_str:
+            return None
+        try:
+            return json.loads(json_str)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning(f"Failed to parse JSON data: {e}")
+            return {'error': 'Invalid JSON data'}
 
 class SystemMetrics(db.Model):
     """Model for storing system metrics snapshots"""

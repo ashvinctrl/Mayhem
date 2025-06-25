@@ -1,40 +1,67 @@
 import re
 import json
+import logging
 from datetime import datetime
 from collections import Counter, defaultdict
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 class NLPLogAnalyzer:
-    """Advanced NLP-based log analyzer for chaos engineering insights"""
+    """Advanced NLP-based log analyzer for chaos engineering insights with robust error handling"""
     
     def __init__(self):
-        self.failure_patterns = [
-            # Common failure patterns
-            r'(?i)(error|exception|failure|fault|crash)',
-            r'(?i)(timeout|connection\s+refused|connection\s+reset)',
-            r'(?i)(out\s+of\s+memory|memory\s+leak|heap\s+space)',
-            r'(?i)(cpu\s+spike|high\s+cpu|cpu\s+usage)',
-            r'(?i)(disk\s+full|no\s+space|storage\s+full)',
-            r'(?i)(network\s+partition|network\s+failure|packet\s+loss)',
-            r'(?i)(database\s+error|sql\s+error|connection\s+pool)',
-            r'(?i)(service\s+unavailable|502|503|504)',
-        ]
-        
-        self.severity_keywords = {
-            'critical': ['fatal', 'critical', 'emergency', 'panic', 'crash'],
-            'high': ['error', 'exception', 'failure', 'timeout', 'refuse'],
-            'medium': ['warning', 'warn', 'deprecated', 'slow', 'retry'],
-            'low': ['info', 'debug', 'trace', 'notice']
-        }
-        
-        self.service_patterns = [
-            r'service[:\-\s]+([a-zA-Z0-9\-_]+)',
-            r'component[:\-\s]+([a-zA-Z0-9\-_]+)',
-            r'module[:\-\s]+([a-zA-Z0-9\-_]+)',
-        ]
-
+        try:
+            self.failure_patterns = [
+                # Common failure patterns
+                r'(?i)(error|exception|failure|fault|crash)',
+                r'(?i)(timeout|connection\s+refused|connection\s+reset)',
+                r'(?i)(out\s+of\s+memory|memory\s+leak|heap\s+space)',
+                r'(?i)(cpu\s+spike|high\s+cpu|cpu\s+usage)',
+                r'(?i)(disk\s+full|no\s+space|storage\s+full)',
+                r'(?i)(network\s+partition|network\s+failure|packet\s+loss)',
+                r'(?i)(database\s+error|sql\s+error|connection\s+pool)',
+                r'(?i)(service\s+unavailable|502|503|504)',
+            ]
+            
+            self.severity_keywords = {
+                'critical': ['fatal', 'critical', 'emergency', 'panic', 'crash'],
+                'high': ['error', 'exception', 'failure', 'timeout', 'refuse'],
+                'medium': ['warning', 'warn', 'deprecated', 'slow', 'retry'],
+                'low': ['info', 'debug', 'trace', 'notice']
+            }
+            
+            self.service_patterns = [
+                r'service[:\-\s]+([a-zA-Z0-9\-_]+)',
+                r'component[:\-\s]+([a-zA-Z0-9\-_]+)',
+                r'module[:\-\s]+([a-zA-Z0-9\-_]+)',
+            ]
+            
+            # Compile regex patterns for better performance
+            self._compiled_patterns = {}
+            for i, pattern in enumerate(self.failure_patterns):
+                try:
+                    self._compiled_patterns[i] = re.compile(pattern)
+                except re.error as e:
+                    logger.warning(f"Invalid regex pattern {pattern}: {e}")
+            
+            logger.info("NLPLogAnalyzer initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize NLPLogAnalyzer: {e}")
+            # Set minimal defaults to prevent complete failure
+            self.failure_patterns = [r'(?i)(error|exception)']
+            self.severity_keywords = {'high': ['error'], 'low': ['info']}
+            self.service_patterns = [r'service[:\s]+([a-zA-Z0-9\-_]+)']
+            self._compiled_patterns = {}
+    
     def analyze_logs(self, logs: str) -> Dict[str, Any]:
         """
         Analyzes the provided logs to extract relevant information for failure pattern identification.
@@ -45,26 +72,67 @@ class NLPLogAnalyzer:
         Returns:
             dict: A dictionary containing analyzed log information.
         """
-        if not logs or not isinstance(logs, str):
-            return {'error': 'Invalid logs provided'}
-        
-        log_lines = logs.strip().split('\n')
-        
-        analysis = {
-            'total_lines': len(log_lines),
-            'timestamp_range': self._extract_timestamp_range(log_lines),
-            'severity_distribution': self._analyze_severity(log_lines),
-            'failure_indicators': self._detect_failures(log_lines),
-            'affected_services': self._extract_services(log_lines),
-            'error_frequency': self._calculate_error_frequency(log_lines),
-            'anomaly_score': self._calculate_anomaly_score(log_lines),
-            'recommendations': []
-        }
-        
-        # Generate recommendations based on analysis
-        analysis['recommendations'] = self._generate_recommendations(analysis)
-        
-        return analysis
+        try:
+            # Input validation
+            if not logs:
+                logger.warning("Empty logs provided for analysis")
+                return {'error': 'Empty logs provided', 'total_lines': 0}
+            
+            if not isinstance(logs, str):
+                logger.warning(f"Invalid logs type: {type(logs)}")
+                return {'error': f'Invalid logs type: expected str, got {type(logs).__name__}'}
+            
+            # Basic sanitization
+            try:
+                logs = logs.strip()
+                if len(logs) > 10_000_000:  # 10MB limit
+                    logger.warning(f"Logs too large ({len(logs)} chars), truncating to 10MB")
+                    logs = logs[:10_000_000]
+                    
+                log_lines = logs.split('\n')
+                
+                if len(log_lines) > 100_000:  # 100k lines limit
+                    logger.warning(f"Too many log lines ({len(log_lines)}), truncating to 100k")
+                    log_lines = log_lines[:100_000]
+                    
+            except Exception as e:
+                logger.error(f"Failed to process log lines: {e}")
+                return {'error': f'Failed to process logs: {str(e)}'}
+            
+            analysis = {
+                'total_lines': len(log_lines),
+                'timestamp_range': self._extract_timestamp_range(log_lines),
+                'severity_distribution': self._analyze_severity(log_lines),
+                'failure_indicators': self._detect_failures(log_lines),
+                'affected_services': self._extract_services(log_lines),
+                'error_frequency': self._calculate_error_frequency(log_lines),
+                'anomaly_score': self._calculate_anomaly_score(log_lines),
+                'recommendations': []
+            }
+            
+            # Generate recommendations based on analysis
+            try:
+                analysis['recommendations'] = self._generate_recommendations(analysis)
+            except Exception as e:
+                logger.warning(f"Failed to generate recommendations: {e}")
+                analysis['recommendations'] = ["Unable to generate recommendations due to analysis error"]
+            
+            logger.info(f"Log analysis completed: {len(log_lines)} lines processed")
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"Critical error during log analysis: {e}")
+            return {
+                'error': f'Analysis failed: {str(e)}',
+                'total_lines': 0,
+                'timestamp_range': {'start': 'unknown', 'end': 'unknown'},
+                'severity_distribution': {},
+                'failure_indicators': {},
+                'affected_services': [],
+                'error_frequency': 0.0,
+                'anomaly_score': 0.0,
+                'recommendations': ["Analysis failed - please check logs format"]
+            }
 
     def extract_failure_patterns(self, analyzed_logs: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
@@ -190,59 +258,121 @@ class NLPLogAnalyzer:
         return prediction
 
     def _extract_timestamp_range(self, log_lines: List[str]) -> Dict[str, str]:
-        """Extract timestamp range from logs"""
-        timestamps = []
-        for line in log_lines[:10] + log_lines[-10:]:  # Check first and last 10 lines
-            # Common timestamp patterns
-            timestamp_patterns = [
-                r'\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}',
-                r'\d{2}/\d{2}/\d{4}\s\d{2}:\d{2}:\d{2}',
-                r'\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}'
-            ]
+        """Extract timestamp range from logs with error handling"""
+        try:
+            timestamps = []
             
-            for pattern in timestamp_patterns:
-                match = re.search(pattern, line)
-                if match:
-                    timestamps.append(match.group())
-                    break
-        
-        if timestamps:
-            return {'start': timestamps[0], 'end': timestamps[-1]}
-        return {'start': 'unknown', 'end': 'unknown'}
+            # Check a reasonable sample to avoid performance issues
+            sample_lines = log_lines[:20] + log_lines[-20:] if len(log_lines) > 40 else log_lines
+            
+            for line in sample_lines:
+                try:
+                    # Common timestamp patterns
+                    timestamp_patterns = [
+                        r'\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}',
+                        r'\d{2}/\d{2}/\d{4}\s\d{2}:\d{2}:\d{2}',
+                        r'\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}',
+                        r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z?'
+                    ]
+                    
+                    for pattern in timestamp_patterns:
+                        try:
+                            match = re.search(pattern, line)
+                            if match:
+                                timestamps.append(match.group())
+                                break
+                        except re.error as e:
+                            logger.debug(f"Regex error in timestamp extraction: {e}")
+                            continue
+                except Exception as e:
+                    logger.debug(f"Error processing line for timestamp: {e}")
+                    continue
+            
+            if timestamps:
+                return {'start': timestamps[0], 'end': timestamps[-1]}
+            
+            logger.debug("No timestamps found in logs")
+            return {'start': 'unknown', 'end': 'unknown'}
+            
+        except Exception as e:
+            logger.warning(f"Failed to extract timestamp range: {e}")
+            return {'start': 'error', 'end': 'error'}
 
     def _analyze_severity(self, log_lines: List[str]) -> Dict[str, int]:
-        """Analyze severity distribution in logs"""
-        severity_counts = defaultdict(int)
-        
-        for line in log_lines:
-            line_lower = line.lower()
-            for severity, keywords in self.severity_keywords.items():
-                if any(keyword in line_lower for keyword in keywords):
-                    severity_counts[severity] += 1
-                    break
-        
-        return dict(severity_counts)
+        """Analyze severity distribution in logs with error handling"""
+        try:
+            severity_counts = defaultdict(int)
+            
+            for line in log_lines:
+                try:
+                    line_lower = line.lower()
+                    for severity, keywords in self.severity_keywords.items():
+                        if any(keyword in line_lower for keyword in keywords):
+                            severity_counts[severity] += 1
+                            break
+                except Exception as e:
+                    logger.debug(f"Error analyzing line severity: {e}")
+                    continue
+            
+            return dict(severity_counts)
+            
+        except Exception as e:
+            logger.warning(f"Failed to analyze severity distribution: {e}")
+            return {}
 
     def _detect_failures(self, log_lines: List[str]) -> Dict[str, int]:
-        """Detect various failure types in logs"""
-        failure_counts = defaultdict(int)
-        
-        for line in log_lines:
-            for pattern in self.failure_patterns:
-                if re.search(pattern, line):
-                    # Categorize the failure type
-                    if re.search(r'(?i)(memory|heap)', line):
-                        failure_counts['memory_issues'] += 1
-                    elif re.search(r'(?i)(cpu|processor)', line):
-                        failure_counts['cpu_issues'] += 1
-                    elif re.search(r'(?i)(network|connection)', line):
-                        failure_counts['network_issues'] += 1
-                    elif re.search(r'(?i)(disk|storage)', line):
-                        failure_counts['storage_issues'] += 1
-                    else:
-                        failure_counts['general_errors'] += 1
-        
-        return dict(failure_counts)
+        """Detect various failure types in logs with error handling"""
+        try:
+            failure_counts = defaultdict(int)
+            
+            for line in log_lines:
+                try:
+                    # Use compiled patterns if available, otherwise fall back to re.search
+                    pattern_matched = False
+                    
+                    for pattern_id, compiled_pattern in self._compiled_patterns.items():
+                        try:
+                            if compiled_pattern.search(line):
+                                pattern_matched = True
+                                break
+                        except Exception as e:
+                            logger.debug(f"Error with compiled pattern {pattern_id}: {e}")
+                            continue
+                    
+                    # Fallback to original patterns if compiled ones fail
+                    if not pattern_matched:
+                        for pattern in self.failure_patterns[:3]:  # Use first 3 patterns as fallback
+                            try:
+                                if re.search(pattern, line):
+                                    pattern_matched = True
+                                    break
+                            except re.error as e:
+                                logger.debug(f"Regex error in failure detection: {e}")
+                                continue
+                    
+                    if pattern_matched:
+                        # Categorize the failure type
+                        line_lower = line.lower()
+                        if any(keyword in line_lower for keyword in ['memory', 'heap', 'oom']):
+                            failure_counts['memory_issues'] += 1
+                        elif any(keyword in line_lower for keyword in ['cpu', 'processor']):
+                            failure_counts['cpu_issues'] += 1
+                        elif any(keyword in line_lower for keyword in ['network', 'connection']):
+                            failure_counts['network_issues'] += 1
+                        elif any(keyword in line_lower for keyword in ['disk', 'storage', 'space']):
+                            failure_counts['storage_issues'] += 1
+                        else:
+                            failure_counts['general_errors'] += 1
+                            
+                except Exception as e:
+                    logger.debug(f"Error processing line for failure detection: {e}")
+                    continue
+            
+            return dict(failure_counts)
+            
+        except Exception as e:
+            logger.warning(f"Failed to detect failures: {e}")
+            return {}
 
     def _extract_services(self, log_lines: List[str]) -> List[str]:
         """Extract affected services from logs"""
