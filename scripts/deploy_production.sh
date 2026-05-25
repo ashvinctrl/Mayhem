@@ -5,7 +5,7 @@
 
 set -e
 
-echo "🚀 Starting Project Mayhem Production Deployment"
+echo "Starting Project Mayhem Production Deployment"
 
 # Configuration
 NAMESPACE="chaos-engineering"
@@ -219,13 +219,13 @@ display_info() {
     log_info "Deployment completed successfully! 🎉"
     
     echo ""
-    echo "📋 Deployment Information:"
+    echo "Deployment Information:"
     echo "=========================="
     echo "Namespace: ${NAMESPACE}"
     echo "Image: ${IMAGE_NAME}"
     echo ""
-    
-    echo "📝 Access Information:"
+
+    echo "Access Information:"
     echo "====================="
     
     # Get ingress information
@@ -239,14 +239,14 @@ display_info() {
     fi
     
     echo ""
-    echo "🔑 API Key: ${API_KEY}"
+    echo "API Key: ${API_KEY}"
     echo ""
-    echo "📊 Monitoring:"
+    echo "Monitoring:"
     echo "Prometheus: kubectl port-forward svc/prometheus-kube-prometheus-prometheus -n monitoring 9090:9090"
     echo "Grafana: kubectl port-forward svc/prometheus-grafana -n monitoring 3000:80"
     echo ""
     
-    log_info "Happy chaos engineering! 💥"
+    log_info "Chaos engineering deployment complete."
 }
 
 # Main deployment flow

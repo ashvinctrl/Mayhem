@@ -1,249 +1,173 @@
+# Mayhem — AI-Driven Chaos Engineering Platform
 
-# Project Mayhem: The AI-Driven Chaos Engineering Platform That Breaks Things (So You Don't Have To)
-
-[![CI/CD Pipeline](https://github.com/yourusername/project-mayhem/workflows/Project%20Mayhem%20CI/CD/badge.svg)](https://github.com/yourusername/project-mayhem/actions)
-[![Security Score](https://img.shields.io/badge/security-A+-green.svg)](https://github.com/yourusername/project-mayhem/security)
+[![CI/CD Pipeline](https://github.com/ashvinctrl/Mayhem/workflows/Project%20Mayhem%20CI%2FCD/badge.svg)](https://github.com/ashvinctrl/Mayhem/actions)
+[![Security Score](https://img.shields.io/badge/security-A+-green.svg)](https://github.com/ashvinctrl/Mayhem/security)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docker Pulls](https://img.shields.io/docker/pulls/yourusername/chaos-orchestrator.svg)](https://hub.docker.com/r/yourusername/chaos-orchestrator)
 
-## 🌟 Overview
+## Overview
 
-Welcome to Project Mayhem, the only platform where breaking your own stuff is not just encouraged—it's automated, AI-powered, and oddly satisfying! Our mission: unleash chaos (safely) on your cloud-native systems, so you can sleep at night knowing your infrastructure is tougher than a caffeinated SRE on call.
+Mayhem is a chaos engineering platform that systematically injects faults into your systems to identify weaknesses before they cause production outages. It uses an AI-powered NLP engine to analyze logs, detect failure patterns, and recommend targeted chaos scenarios.
 
-**Why?** Because real resilience is forged in the fires of (simulated) disaster. And because it's way more fun to watch your app survive a CPU spike than to explain to your boss why it didn't.
+## Key Features
 
-## 🚀 Key Features (and Shenanigans)
+**AI-Generated Chaos Scenarios**
+The NLP engine analyzes postmortems and system logs to identify failure patterns and generate targeted chaos scenarios, learning from each experiment.
 
-### 🤖 **AI-Generated Chaos Scenarios**
-Our advanced NLP engine reads your postmortems and logs (so you don't have to) and invents new ways to break things. It learns from your past failures, so every disaster is a learning opportunity—literally.
+**Adaptive Fault Injection**
+Supports 15+ realistic failure scenarios including network partitions, CPU spikes, memory pressure, disk saturation, latency injection, and Kubernetes-level events.
 
-### 💥 **Adaptive Fault Injection**
-The platform picks the worst possible time and place to inject faults—just like real life! Network partitions, CPU spikes, memory leaks, disk fill-ups, and latency gremlins are all on the menu.
-
-### �️ **Production-Ready Security**
+**Production-Ready Security**
 - API key authentication with rate limiting
 - Secure secrets management
 - Input validation and sanitization
 - Non-root Docker containers
 - RBAC-enabled Kubernetes deployment
 
-### 🔄 **Continuous Learning**
-The more chaos you unleash, the smarter the platform gets. It's like a chaos monkey, but with a PhD and a sense of humor.
-
-### 📊 **Real-Time Monitoring**
+**Real-Time Monitoring**
 - Prometheus metrics integration
 - Grafana dashboards with 15+ visualizations
 - System health monitoring
-- Chaos experiment tracking and analytics
+- Chaos experiment history and analytics
 
-### 🎯 **15+ Realistic Chaos Scenarios**
-- CPU spikes and memory leaks
-- Network latency and partitions
-- Database slowdowns and timeouts
-- Container restarts and process kills
-- SSL certificate expiry simulation
-- And many more enterprise-grade scenarios!
+## Tech Stack
 
-## 🛠️ Tech Stack (a.k.a. The Mayhem Arsenal)
+| Layer | Technology |
+|---|---|
+| Backend | Python 3.9+, Flask, SQLAlchemy |
+| Frontend | HTML5/CSS3/JavaScript, Bootstrap 5 |
+| Containerization | Docker (multi-stage builds) |
+| Orchestration | Kubernetes with RBAC |
+| Monitoring | Prometheus, Grafana |
+| Database | SQLite (dev) / PostgreSQL (prod) |
+| CI/CD | GitHub Actions |
 
-- **Backend**: Python 3.9+ with Flask and SQLAlchemy
-- **Frontend**: Modern HTML5/CSS3/JavaScript with Bootstrap 5
-- **Containerization**: Docker with multi-stage builds
-- **Orchestration**: Kubernetes with RBAC and security policies
-- **Monitoring**: Prometheus + Grafana with custom dashboards
-- **AI/ML**: Advanced NLP for log analysis and pattern detection
-- **Security**: API authentication, rate limiting, input validation
-- **CI/CD**: GitHub Actions with automated testing and deployment
-- **Database**: SQLite (dev) / PostgreSQL (production)
+## Prerequisites
 
-## 📋 Prerequisites
+- Docker 20.0+ and Docker Compose 2.0+
+- Kubernetes 1.21+ (production deployment only)
+- Python 3.9+ (local development)
 
-- **Docker** 20.0+ and Docker Compose 2.0+
-- **Kubernetes** 1.21+ (for production deployment)
-- **Python** 3.9+ (for local development)
-- **Git** for version control
+## Quick Start
 
-## ⚡ Quick Start
+### 1. Clone
 
-### 1. **Clone the Repository**
 ```bash
-git clone https://github.com/yourusername/project-mayhem.git
-cd project-mayhem
+git clone https://github.com/ashvinctrl/Mayhem.git
+cd Mayhem
 ```
 
-### 2. **Environment Setup**
+### 2. Configure environment
+
 ```bash
-# Copy environment template
 cp .env.example .env
-
-# Edit .env with your configuration
-# CHAOS_API_KEY=your_secure_api_key_here
-# GRAFANA_PASSWORD=your_secure_password_here
+# Edit .env — set CHAOS_API_KEY, SECRET_KEY, GRAFANA_PASSWORD
 ```
 
-### 3. **Docker Compose Deployment (Recommended)**
-```bash
-# Start the complete stack
-docker-compose up --build -d
+### 3. Start with Docker Compose
 
-# View logs
+```bash
+docker-compose up --build -d
 docker-compose logs -f chaos-orchestrator
 ```
 
-### 4. **Access the Platform**
-- **Main UI**: http://localhost:5000
-- **Prometheus**: http://localhost:9090
-- **Grafana**: http://localhost:3000 (admin / your_password)
+### 4. Access
 
-### 5. **Run Your First Chaos Experiment**
+| Service | URL | Credentials |
+|---|---|---|
+| Platform UI | http://localhost:5000 | API key from .env |
+| Prometheus | http://localhost:9090 | — |
+| Grafana | http://localhost:3000 | admin / GRAFANA_PASSWORD |
+
+### 5. Inject your first chaos experiment
+
+Via the UI: open http://localhost:5000, go to **Chaos Scenarios**, enter your API key, select a scenario and click Execute.
+
+Via API:
 ```bash
-# Using the UI - navigate to http://localhost:5000
-# Or using API with your API key:
-
 curl -X POST http://localhost:5000/inject \
   -H "X-API-Key: your_api_key" \
   -H "Content-Type: application/json" \
-  -d '{
-    "scenario": "cpu_spike",
-    "duration": 30,
-    "intensity": "medium"
-  }'
+  -d '{"scenario": "cpu_spike", "duration": 30, "intensity": "medium"}'
 ```
 
-## 🚢 Production Deployment
+## API Reference
 
-### Kubernetes Deployment
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | /health | No | Health check |
+| GET | /scenarios | No | List available scenarios |
+| GET | /metrics | No | Prometheus metrics |
+| GET | /system-status | No | Real-time system metrics |
+| GET | /chaos-history | No | Experiment history (last 20) |
+| POST | /inject | Yes (API key) | Inject a chaos scenario |
+| POST | /analyze-logs | No | NLP log analysis |
+
+### Inject payload
+
+```json
+{
+  "scenario": "cpu_spike",
+  "duration": 30,
+  "intensity": "medium"
+}
+```
+
+**Valid scenarios**: `cpu_spike`, `memory_leak`, `disk_fill`, `network_latency`, `network_partition`, `process_kill`, `container_restart`, `database_slowdown`, `api_timeout`, `ssl_certificate_expired`, `dns_failure`, `storage_corruption`, `kubernetes_pod_eviction`, `service_discovery_failure`, `load_balancer_failure`
+
+**Intensity**: `low`, `medium`, `high`
+
+**Duration**: 1–300 seconds
+
+### Analyze logs payload
+
 ```bash
-# Production deployment to Kubernetes
+curl -X POST http://localhost:5000/analyze-logs \
+  -H "Content-Type: application/json" \
+  -d '{"logs": "2024-01-01 ERROR connection timeout\n2024-01-01 WARN memory high"}'
+```
+
+## Production Deployment
+
+```bash
+# Deploy to Kubernetes
 ./scripts/deploy_production.sh
 
-# Or step by step:
+# Or manually
 kubectl apply -f configs/kubernetes_deployment_production.yaml
-
-# Check deployment status
 kubectl get pods -n chaos-engineering
 ```
 
-### Security Configuration
+Generate a secure API key:
 ```bash
-# Generate secure API key
 export CHAOS_API_KEY=$(openssl rand -hex 32)
-
-# Create Kubernetes secrets
 kubectl create secret generic chaos-secrets \
   --from-literal=api-key=${CHAOS_API_KEY} \
-  --from-literal=database-url="postgresql://..." \
   -n chaos-engineering
 ```
 
-## 🧪 Testing
+## Testing
 
-### Unit Tests
 ```bash
-# Run all tests
+# Unit tests
 python -m pytest src/tests/ -v
 
-# Run with coverage
+# With coverage
 python -m pytest src/tests/ --cov=src --cov-report=html
-```
 
-### Integration Tests
-```bash
-# Start test environment
-docker-compose up -d
-
-# Run integration tests
+# Integration tests (requires Docker Compose running)
 python -m pytest src/tests/test_integration.py -v
-
-# Cleanup
-docker-compose down
 ```
 
-### Load Testing
+## Environment Variables
+
 ```bash
-# Install artillery
-npm install -g artillery
-
-# Run load tests
-artillery run tests/load-test.yml
-```
-
-## 📊 Monitoring & Observability
-
-### Grafana Dashboards
-- **System Metrics**: CPU, Memory, Disk, Network utilization
-- **Chaos Experiments**: Success/failure rates, duration tracking
-- **Application Metrics**: Request rates, response times, error rates
-- **AI Insights**: Pattern detection, failure predictions
-
-### Prometheus Metrics
-```
-# System metrics
-system_cpu_percent
-system_memory_percent
-chaos_injections_total
-chaos_scenarios_total{scenario_type="cpu_spike"}
-
-# Application metrics
-flask_http_request_duration_seconds
-flask_http_request_total
-```
-
-### Log Analysis
-The platform includes advanced NLP-based log analysis that:
-- Identifies failure patterns automatically
-- Predicts potential system failures
-- Recommends targeted chaos scenarios
-- Generates actionable insights
-
-## 🤖 AI Features
-
-### Intelligent Scenario Generation
-```python
-# Example: AI-generated chaos recommendations
-analyzer = NLPLogAnalyzer()
-analysis = analyzer.analyze_logs(your_logs)
-patterns = analyzer.extract_failure_patterns(analysis)
-prediction = analyzer.predict_failure_likelihood(current_metrics, patterns)
-```
-
-### Pattern Recognition
-- **Memory leaks**: Detects memory-related failures in logs
-- **CPU exhaustion**: Identifies CPU-related performance issues
-- **Network issues**: Recognizes network partition patterns
-- **Service failures**: Maps service-specific failure patterns
-
-## 🔐 Security Features
-
-### Authentication & Authorization
-- API key-based authentication
-- Rate limiting (configurable per endpoint)
-- Input validation and sanitization
-- Secure secrets management
-
-### Container Security
-- Non-root user execution
-- Read-only root filesystem
-- Security context policies
-- Vulnerability scanning with Trivy
-
-### Kubernetes Security
-- RBAC policies with minimal permissions
-- Network policies for traffic isolation
-- Pod Security Standards enforcement
-- Secret management with encryption
-
-## 🔧 Configuration
-
-### Environment Variables
-```bash
-# Core Configuration
+# Core
 ENV=production
 FLASK_ENV=production
 SECRET_KEY=your_flask_secret_key
 
 # Database
-DATABASE_URL=sqlite:///chaos_platform.db
+DATABASE_URL=sqlite:///chaos_platform.db   # or postgresql://...
 
 # Security
 CHAOS_API_KEY=your_secure_api_key
@@ -253,84 +177,51 @@ GRAFANA_PASSWORD=your_grafana_password
 LOG_LEVEL=INFO
 PROMETHEUS_RETENTION=30d
 
-# Optional: External Services
+# Optional
 OPENAI_API_KEY=your_openai_key
 SLACK_WEBHOOK_URL=your_slack_webhook
 ```
 
-### Chaos Scenario Configuration
-```yaml
-# configs/chaos_config.yaml
-scenarios:
-  cpu_spike:
-    max_duration: 300
-    intensity_levels: [low, medium, high]
-    safety_checks: true
-  
-  memory_leak:
-    max_duration: 180
-    memory_limit_mb: 500
-    cleanup_enabled: true
+## Monitoring
+
+### Prometheus metrics exposed
+
+```
+system_cpu_percent
+system_memory_percent
+chaos_injections_total
+chaos_scenarios_total{scenario_type="..."}
+chaos_orchestrator_requests_total
 ```
 
-## 📈 Performance & Scalability
+### Log analysis
 
-### Resource Requirements
-- **Minimum**: 2 CPU cores, 4GB RAM, 10GB storage
-- **Recommended**: 4 CPU cores, 8GB RAM, 50GB storage
-- **Production**: 8+ CPU cores, 16GB+ RAM, 100GB+ storage
+The `/analyze-logs` endpoint accepts raw log text and returns:
+- Severity distribution
+- Detected failure patterns (memory, CPU, network, storage)
+- Anomaly score
+- Recommended chaos scenarios
+- Actionable recommendations
 
-### Scaling
-- Horizontal pod autoscaling in Kubernetes
-- Database connection pooling
-- Prometheus metrics for scaling decisions
-- Load balancer support with session affinity
+## Resource Requirements
 
-## 🤝 Contributing
+| Environment | CPU | RAM | Storage |
+|---|---|---|---|
+| Minimum | 2 cores | 4 GB | 10 GB |
+| Recommended | 4 cores | 8 GB | 50 GB |
+| Production | 8+ cores | 16+ GB | 100+ GB |
 
-We welcome contributions! Please see our [Contributing Guide](docs/CONTRIBUTING.md) for details.
+## Contributing
 
-### Development Setup
-```bash
-# Clone and setup development environment
-git clone https://github.com/yourusername/project-mayhem.git
-cd project-mayhem
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for contribution guidelines.
 
-# Install development dependencies
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
+Code standards: Black, isort, flake8, bandit, pytest (80%+ coverage target).
 
-# Run pre-commit hooks
-pre-commit install
+## License
 
-# Start development server
-python src/app.py
-```
+MIT License. See [LICENSE](LICENSE) for details.
 
-### Code Quality Standards
-- **Code formatting**: Black + isort
-- **Linting**: flake8 + pylint
-- **Security**: bandit + safety
-- **Testing**: pytest with 80%+ coverage
-- **Documentation**: Sphinx with type hints
+## Support
 
-## 📝 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details. (You break it, you bought it!)
-
-## 🙏 Acknowledgments
-
-- Inspired by Netflix's Chaos Monkey, Gremlins, and every SRE who's ever said "What could possibly go wrong?"
-- Special thanks to the open-source community for their contributions, memes, and moral support
-- Built with ❤️ and a healthy dose of controlled chaos
-
-## 📞 Support
-
-- **Documentation**: [Full documentation](https://yourusername.github.io/project-mayhem)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/project-mayhem/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/project-mayhem/discussions)
-- **Security**: security@yourdomain.com
-
----
-
-**Remember**: In chaos we trust, but in monitoring we verify! 🔥💥🚀
+- Issues: https://github.com/ashvinctrl/Mayhem/issues
+- Discussions: https://github.com/ashvinctrl/Mayhem/discussions

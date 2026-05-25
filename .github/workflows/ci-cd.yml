@@ -302,7 +302,7 @@ jobs:
       uses: 8398a7/action-slack@v3
       with:
         status: success
-        text: "🚀 Project Mayhem deployed to production successfully!"
+        text: "Project Mayhem deployed to production successfully!"
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
@@ -317,6 +317,6 @@ jobs:
       uses: 8398a7/action-slack@v3
       with:
         status: failure
-        text: "❌ Project Mayhem pipeline failed!"
+        text: "Project Mayhem pipeline failed!"
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
