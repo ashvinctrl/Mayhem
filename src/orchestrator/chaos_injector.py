@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, Response, send_from_directory, render_template
+from flask import Flask, jsonify, Response, send_from_directory, render_template, request
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, Counter, Gauge
 import random
 import psutil
@@ -20,7 +20,7 @@ from ai_models.nlp_log_analysis import NLPLogAnalyzer
 
 # Configure logging
 logging.basicConfig(
-    level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO')),
+    level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO'), logging.INFO),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -101,9 +101,27 @@ def ui():
     return send_from_directory(app.static_folder, "index.html")
 
 
-# Chaos injection endpoint
-from flask import request
+def _make_chaos_wrapper(chaos_func, exp):
+    """Wrap a chaos function so experiment status is set to 'completed' when it finishes."""
+    def wrapper():
+        try:
+            chaos_func()
+        finally:
+            if exp and exp.status == 'running':
+                try:
+                    exp.status = 'completed'
+                    exp.end_time = datetime.utcnow()
+                    db.session.commit()
+                except Exception as e:
+                    logger.error(f"Failed to mark experiment complete: {e}")
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
+    return wrapper
 
+
+# Chaos injection endpoint
 @app.route("/inject", methods=["POST"])
 @security.require_api_key
 @security.rate_limit(requests_per_minute=30)
@@ -189,19 +207,19 @@ def inject():
                             except Exception as db_e:
                                 logger.error(f"Failed to update experiment error: {db_e}")
                                 
-                threading.Thread(target=cpu_stress).start()
+                threading.Thread(target=_make_chaos_wrapper(cpu_stress, experiment)).start()
                 result = {"result": f"CPU spike ({intensity}) injected for {duration}s", "scenario": scenario}
             
             elif scenario == "memory_leak":
                 def mem_stress():
+                    leaker = None
                     try:
-                        multiplier = {"low": 5000, "medium": 10000, "high": 20000}[intensity]
+                        size_mb = {"low": 50, "medium": 100, "high": 200}[intensity]
                         leaker = []
-                        for i in range(duration * multiplier):
-                            leaker.append(' ' * 1024)
-                            time.sleep(0.001)
+                        for _ in range(size_mb):
+                            leaker.append(b' ' * (1024 * 1024))  # 1 MB per chunk
+                        logger.info(f"Allocated {size_mb} MB for memory stress experiment {experiment.id if experiment else 'unknown'}")
                         time.sleep(duration)
-                        del leaker
                         logger.info(f"Memory leak chaos completed for experiment {experiment.id if experiment else 'unknown'}")
                     except MemoryError as e:
                         logger.error(f"Memory leak chaos hit system limits: {e}")
@@ -212,6 +230,10 @@ def inject():
                                 db.session.commit()
                             except Exception as db_e:
                                 logger.error(f"Failed to update experiment error: {db_e}")
+                                try:
+                                    db.session.rollback()
+                                except Exception:
+                                    pass
                     except Exception as e:
                         logger.error(f"Memory leak chaos failed: {e}")
                         if experiment:
@@ -221,34 +243,28 @@ def inject():
                                 db.session.commit()
                             except Exception as db_e:
                                 logger.error(f"Failed to update experiment error: {db_e}")
-                                
-                threading.Thread(target=mem_stress).start()
+                                try:
+                                    db.session.rollback()
+                                except Exception:
+                                    pass
+                    finally:
+                        del leaker
+                threading.Thread(target=_make_chaos_wrapper(mem_stress, experiment)).start()
                 result = {"result": f"Memory leak ({intensity}) injected for {duration}s", "scenario": scenario}
             
             elif scenario == "disk_fill":
                 def disk_stress():
+                    temp_files = []
                     try:
                         size_mb = {"low": 50, "medium": 100, "high": 200}[intensity]
-                        temp_files = []
-                        temp_dir = "/tmp" if os.name != 'nt' else "C:\\temp"
-                        
-                        # Ensure temp directory exists
+                        temp_dir = "/tmp" if os.name != 'nt' else os.path.join(os.environ.get('TEMP', 'C:\\temp'), 'chaos')
                         os.makedirs(temp_dir, exist_ok=True)
-                        
                         for i in range(size_mb):
                             filename = os.path.join(temp_dir, f"chaos_disk_{i}.tmp")
-                            with open(filename, 'w') as f:
-                                f.write('x' * (1024 * 1024))  # 1MB file
+                            with open(filename, 'wb') as f:
+                                f.write(b'x' * (1024 * 1024))  # 1 MB file
                             temp_files.append(filename)
                         time.sleep(duration)
-                        # Cleanup
-                        for f in temp_files:
-                            try:
-                                os.remove(f)
-                            except FileNotFoundError:
-                                pass
-                            except Exception as cleanup_e:
-                                logger.warning(f"Failed to cleanup temp file {f}: {cleanup_e}")
                         logger.info(f"Disk fill chaos completed for experiment {experiment.id if experiment else 'unknown'}")
                     except PermissionError as e:
                         logger.error(f"Permission denied during disk fill chaos: {e}")
@@ -259,6 +275,10 @@ def inject():
                                 db.session.commit()
                             except Exception as db_e:
                                 logger.error(f"Failed to update experiment error: {db_e}")
+                                try:
+                                    db.session.rollback()
+                                except Exception:
+                                    pass
                     except OSError as e:
                         logger.error(f"OS error during disk fill chaos: {e}")
                         if experiment:
@@ -268,6 +288,10 @@ def inject():
                                 db.session.commit()
                             except Exception as db_e:
                                 logger.error(f"Failed to update experiment error: {db_e}")
+                                try:
+                                    db.session.rollback()
+                                except Exception:
+                                    pass
                     except Exception as e:
                         logger.error(f"Disk fill chaos failed: {e}")
                         if experiment:
@@ -277,8 +301,17 @@ def inject():
                                 db.session.commit()
                             except Exception as db_e:
                                 logger.error(f"Failed to update experiment error: {db_e}")
-                                
-                threading.Thread(target=disk_stress).start()
+                                try:
+                                    db.session.rollback()
+                                except Exception:
+                                    pass
+                    finally:
+                        for f in temp_files:
+                            try:
+                                os.remove(f)
+                            except OSError:
+                                pass
+                threading.Thread(target=_make_chaos_wrapper(disk_stress, experiment)).start()
                 result = {"result": f"Disk fill ({intensity}) injected for {duration}s", "scenario": scenario}
             
             elif scenario == "network_latency":
@@ -301,7 +334,7 @@ def inject():
                             except Exception as db_e:
                                 logger.error(f"Failed to update experiment error: {db_e}")
                                 
-                threading.Thread(target=network_delay).start()
+                threading.Thread(target=_make_chaos_wrapper(network_delay, experiment)).start()
                 result = {"result": f"Network latency ({intensity}) injected for {duration}s", "scenario": scenario}
             
             elif scenario == "api_timeout":
@@ -320,7 +353,7 @@ def inject():
                             except Exception as db_e:
                                 logger.error(f"Failed to update experiment error: {db_e}")
                                 
-                threading.Thread(target=timeout_simulation).start()
+                threading.Thread(target=_make_chaos_wrapper(timeout_simulation, experiment)).start()
                 result = {"result": f"API timeout ({intensity}) simulated for {duration}s", "scenario": scenario}
             
             elif scenario == "process_kill":
@@ -341,7 +374,7 @@ def inject():
                             except Exception as db_e:
                                 logger.error(f"Failed to update experiment error: {db_e}")
                                 
-                threading.Thread(target=process_chaos).start()
+                threading.Thread(target=_make_chaos_wrapper(process_chaos, experiment)).start()
                 result = {"result": f"Process instability ({intensity}) simulated for {duration}s", "scenario": scenario}
             
             elif scenario == "database_slowdown":
@@ -363,7 +396,7 @@ def inject():
                             except Exception as db_e:
                                 logger.error(f"Failed to update experiment error: {db_e}")
                                 
-                threading.Thread(target=db_slowdown).start()
+                threading.Thread(target=_make_chaos_wrapper(db_slowdown, experiment)).start()
                 result = {"result": f"Database slowdown ({intensity}) injected for {duration}s", "scenario": scenario}
             
             else:
@@ -397,18 +430,21 @@ def inject():
                             except Exception as db_e:
                                 logger.error(f"Failed to update experiment error: {db_e}")
                 
-                threading.Thread(target=generic_chaos).start()
+                threading.Thread(target=_make_chaos_wrapper(generic_chaos, experiment)).start()
                 result = {"result": f"{scenario_name} ({intensity}) executed for {duration}s", "scenario": scenario}
             
-            # Update experiment status to completed if successful
-            if experiment and not experiment.error_message:
+            # Save the initial result payload; the chaos thread will update status to
+            # 'completed' (or 'failed') when it actually finishes via _make_chaos_wrapper.
+            if experiment:
                 try:
-                    experiment.status = 'completed'
-                    experiment.end_time = datetime.utcnow()
                     experiment.result = json.dumps(result)
                     db.session.commit()
                 except Exception as e:
-                    logger.error(f"Failed to update experiment completion status: {e}")
+                    logger.error(f"Failed to record experiment result: {e}")
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
             
             return jsonify(result)
             
@@ -595,6 +631,24 @@ def chaos_history():
             }
         ]
         return jsonify({"history": history, "note": "Using fallback data due to database error"})
+
+@app.route("/analyze-logs", methods=["POST"])
+def analyze_logs():
+    """Analyze log text using NLP and return failure patterns + recommendations"""
+    try:
+        data = request.get_json(force=True)
+        logs = data.get('logs', '') if isinstance(data, dict) else ''
+        if not logs or not isinstance(logs, str):
+            return jsonify({'error': 'Provide a "logs" string in the request body'}), 400
+        if ai_analyzer is None:
+            return jsonify({'error': 'AI analyzer is not available'}), 503
+        analysis = ai_analyzer.analyze_logs(logs)
+        patterns = ai_analyzer.extract_failure_patterns(analysis)
+        return jsonify({'analysis': analysis, 'patterns': patterns})
+    except Exception as e:
+        logger.error(f"Log analysis endpoint failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == "__main__":
     try:

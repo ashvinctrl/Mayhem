@@ -183,16 +183,19 @@
         <!-- Sidebar -->
         <div class="col-md-2 sidebar p-3">
             <nav class="nav flex-column">
-                <a class="nav-link nav-link-custom active" href="#" onclick="showTab('dashboard')">
+                <a class="nav-link nav-link-custom active" href="#" onclick="showTab('dashboard', this)">
                     <i class="bi bi-speedometer2 me-2"></i>Dashboard
                 </a>
-                <a class="nav-link nav-link-custom" href="#" onclick="showTab('scenarios')">
+                <a class="nav-link nav-link-custom" href="#" onclick="showTab('scenarios', this)">
                     <i class="bi bi-lightning me-2"></i>Chaos Scenarios
                 </a>
-                <a class="nav-link nav-link-custom" href="#" onclick="showTab('monitoring')">
+                <a class="nav-link nav-link-custom" href="#" onclick="showTab('monitoring', this)">
                     <i class="bi bi-graph-up me-2"></i>Monitoring
                 </a>
-                <a class="nav-link nav-link-custom" href="#" onclick="showTab('logs')">
+                <a class="nav-link nav-link-custom" href="#" onclick="showTab('history', this)">
+                    <i class="bi bi-clock-history me-2"></i>History
+                </a>
+                <a class="nav-link nav-link-custom" href="#" onclick="showTab('logs', this)">
                     <i class="bi bi-file-text me-2"></i>Logs
                 </a>
             </nav>
@@ -280,6 +283,13 @@
                             </h5>
                             <form id="inject-form">
                                 <div class="mb-3">
+                                    <label for="api-key" class="form-label text-white">
+                                        <i class="bi bi-key me-2"></i>API Key
+                                    </label>
+                                    <input type="password" id="api-key" class="form-control form-control-dark" placeholder="Enter your API key" required>
+                                    <div class="form-text text-secondary">Saved in your browser. Default dev key: <code>default_dev_key</code></div>
+                                </div>
+                                <div class="mb-3">
                                     <label for="scenario" class="form-label text-white">
                                         <i class="bi bi-gear me-2"></i>Scenario Type
                                     </label>
@@ -336,6 +346,47 @@
                 </div>
             </div>
 
+            <!-- History Tab -->
+            <div id="history-tab" class="tab-content" style="display: none;">
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <h2 class="text-white mb-4">
+                            <i class="bi bi-clock-history me-2"></i>Experiment History
+                        </h2>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="chaos-card p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="text-white mb-0">Recent Chaos Experiments</h5>
+                                <button class="btn btn-sm btn-primary-custom" onclick="updateHistory()">
+                                    <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                                </button>
+                            </div>
+                            <div id="history-table-container">
+                                <table class="table table-dark table-hover" id="history-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Scenario</th>
+                                            <th>Duration</th>
+                                            <th>Intensity</th>
+                                            <th>Status</th>
+                                            <th>Started</th>
+                                            <th>Ended</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="history-tbody">
+                                        <tr><td colspan="7" class="text-center text-secondary">Loading history...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Logs Tab -->
             <div id="logs-tab" class="tab-content" style="display: none;">
                 <div class="row mb-4">
@@ -364,23 +415,17 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// Tab management
-function showTab(tabName) {
-    // Hide all tabs
+// Tab management — navLink is the <a> element passed via onclick="showTab('x', this)"
+function showTab(tabName, navLink) {
     document.querySelectorAll('.tab-content').forEach(tab => {
         tab.style.display = 'none';
     });
-    
-    // Remove active class from all nav links
     document.querySelectorAll('.nav-link-custom').forEach(link => {
         link.classList.remove('active');
     });
-    
-    // Show selected tab
     document.getElementById(tabName + '-tab').style.display = 'block';
-    
-    // Add active class to clicked nav link
-    event.target.classList.add('active');
+    if (navLink) navLink.classList.add('active');
+    if (tabName === 'history') updateHistory();
 }
 
 // Enhanced metrics tracking
@@ -419,7 +464,7 @@ function updateMetrics() {
             // Parse CPU and memory from metrics
             const cpuMatch = d.match(/system_cpu_percent\s+([\d.]+)/);
             const memMatch = d.match(/system_memory_percent\s+([\d.]+)/);
-            const chaosMatch = d.match(/chaos_requests_total\s+([\d.]+)/);
+            const chaosMatch = d.match(/chaos_orchestrator_requests_total\s+([\d.]+)/);
             
             if (cpuMatch) {
                 metricsData.cpuUsage = parseFloat(cpuMatch[1]);
@@ -473,47 +518,72 @@ function updateScenarios() {
         });
 }
 
+// Load saved API key from localStorage on page load
+function loadApiKey() {
+    const saved = localStorage.getItem('chaosApiKey');
+    if (saved) document.getElementById('api-key').value = saved;
+}
+
 // Enhanced chaos injection
 const form = document.getElementById('inject-form');
 form.onsubmit = function(e) {
     e.preventDefault();
-    
+
     const scenario = document.getElementById('scenario').value;
     const duration = document.getElementById('duration').value;
     const intensity = document.getElementById('intensity').value;
-    
+    const apiKeyInput = document.getElementById('api-key');
+    const apiKey = apiKeyInput.value.trim();
+
     if (!scenario) {
         showAlert('Please select a scenario', 'warning');
         return;
     }
-    
+    if (!apiKey) {
+        showAlert('Please enter your API key', 'warning');
+        apiKeyInput.focus();
+        return;
+    }
+
+    // Persist the API key for future use
+    localStorage.setItem('chaosApiKey', apiKey);
+
     // Show loading state
     const submitBtn = form.querySelector('button[type="submit"]');
     const originalText = submitBtn.innerHTML;
     submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Executing...';
     submitBtn.disabled = true;
-    
-    // Add log entry
+
     addLogEntry(`Executing ${scenario} for ${duration}s at ${intensity} intensity`, 'warning');
-    
+
     fetch('/inject', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey
+        },
         body: JSON.stringify({scenario, duration: parseInt(duration), intensity})
     })
-    .then(r => r.json())
+    .then(r => {
+        if (r.status === 401) throw new Error('Invalid or missing API key (401 Unauthorized)');
+        if (r.status === 429) throw new Error('Rate limit exceeded — wait a minute and retry');
+        if (!r.ok) throw new Error(`Server error: ${r.status}`);
+        return r.json();
+    })
     .then(d => {
-        showAlert(`✅ ${d.result}`, 'success');
-        addLogEntry(`Chaos injection completed: ${d.result}`, 'success');
-        
-        // Reset form
+        if (d.error) {
+            showAlert(`Error: ${d.error}`, 'danger');
+            addLogEntry(`Chaos injection error: ${d.error}`, 'danger');
+        } else {
+            showAlert(`${d.result}`, 'success');
+            addLogEntry(`Chaos injection started: ${d.result}`, 'success');
+        }
         submitBtn.innerHTML = originalText;
         submitBtn.disabled = false;
     })
     .catch(e => {
-        showAlert(`❌ Failed to inject chaos: ${e.message}`, 'danger');
+        showAlert(`Failed to inject chaos: ${e.message}`, 'danger');
         addLogEntry(`Chaos injection failed: ${e.message}`, 'danger');
-        
         submitBtn.innerHTML = originalText;
         submitBtn.disabled = false;
     });
@@ -556,17 +626,53 @@ function addLogEntry(message, type) {
     logsContainer.scrollTop = logsContainer.scrollHeight;
 }
 
+// Fetch and display chaos history
+function updateHistory() {
+    fetch('/chaos-history')
+        .then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+        })
+        .then(d => {
+            const tbody = document.getElementById('history-tbody');
+            const history = d.history || [];
+            if (history.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-secondary">No experiments recorded yet</td></tr>';
+                return;
+            }
+            tbody.innerHTML = history.map(exp => {
+                const started = exp.start_time ? new Date(exp.start_time).toLocaleString() : (exp.timestamp ? new Date(exp.timestamp * 1000).toLocaleString() : '—');
+                const ended = exp.end_time ? new Date(exp.end_time).toLocaleString() : '—';
+                const statusClass = {completed: 'text-success', failed: 'text-danger', running: 'text-warning'}[exp.status] || 'text-secondary';
+                return `<tr>
+                    <td>${exp.id || '—'}</td>
+                    <td><span class="scenario-badge">${exp.scenario}</span></td>
+                    <td>${exp.duration}s</td>
+                    <td>${exp.intensity}</td>
+                    <td class="${statusClass}">${exp.status}</td>
+                    <td>${started}</td>
+                    <td>${ended}</td>
+                </tr>`;
+            }).join('');
+        })
+        .catch(e => {
+            const tbody = document.getElementById('history-tbody');
+            if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error loading history: ${e.message}</td></tr>`;
+        });
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
+    loadApiKey();
     updateHealth();
     updateMetrics();
     updateScenarios();
-    
+
     // Auto-refresh data
-    setInterval(updateHealth, 10000);   // Every 10 seconds
-    setInterval(updateMetrics, 5000);   // Every 5 seconds
+    setInterval(updateHealth, 10000);    // Every 10 seconds
+    setInterval(updateMetrics, 5000);    // Every 5 seconds
     setInterval(updateScenarios, 30000); // Every 30 seconds
-    
+
     addLogEntry('Chaos Engineering Platform initialized', 'info');
 });
 </script>
