@@ -14,3 +14,7 @@ flask-sqlalchemy==3.0.5
 flask-migrate==4.0.5
 cryptography==41.0.7
 bcrypt==4.1.2
+docker>=6.0.0
+click>=8.1.0
+APScheduler>=3.10.0
+colorama>=0.4.6

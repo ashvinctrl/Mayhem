@@ -3,8 +3,6 @@ import json
 import logging
 from datetime import datetime
 from collections import Counter, defaultdict
-import pandas as pd
-import numpy as np
 from typing import List, Dict, Any, Tuple, Optional
 
 # Configure logging
@@ -423,7 +421,7 @@ class NLPLogAnalyzer:
         pattern_factor = min(unique_patterns / len(self.failure_patterns), 1.0)
         factors.append(pattern_factor)
         
-        return np.mean(factors)
+        return sum(factors) / len(factors) if factors else 0.0
 
     def _generate_recommendations(self, analysis: Dict[str, Any]) -> List[str]:
         """Generate recommendations based on log analysis"""
