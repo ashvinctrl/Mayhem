@@ -1,5 +1,6 @@
 import os
 import logging
+import threading
 from functools import wraps
 from flask import request, jsonify
 import hashlib
@@ -17,6 +18,7 @@ class SecurityManager:
     def __init__(self, api_key=None):
         self.api_key = api_key or os.getenv('CHAOS_API_KEY', 'default_dev_key')
         self.rate_limit_storage = {}
+        self._lock = threading.Lock()
         
     def require_api_key(self, f):
         """Decorator to require API key authentication"""
@@ -61,32 +63,32 @@ class SecurityManager:
     
     def _check_rate_limit(self, client_ip, current_time, requests_per_minute):
         """Check if client has exceeded rate limit"""
-        if client_ip not in self.rate_limit_storage:
-            self.rate_limit_storage[client_ip] = []
-        
-        # Add current request
-        self.rate_limit_storage[client_ip].append(current_time)
-        
-        # Count requests in last minute
-        minute_ago = current_time - timedelta(minutes=1)
-        recent_requests = [
-            req_time for req_time in self.rate_limit_storage[client_ip]
-            if req_time > minute_ago
-        ]
-        
-        self.rate_limit_storage[client_ip] = recent_requests
-        return len(recent_requests) <= requests_per_minute
-    
+        with self._lock:
+            if client_ip not in self.rate_limit_storage:
+                self.rate_limit_storage[client_ip] = []
+
+            self.rate_limit_storage[client_ip].append(current_time)
+
+            minute_ago = current_time - timedelta(minutes=1)
+            recent_requests = [
+                req_time for req_time in self.rate_limit_storage[client_ip]
+                if req_time > minute_ago
+            ]
+
+            self.rate_limit_storage[client_ip] = recent_requests
+            return len(recent_requests) <= requests_per_minute
+
     def _cleanup_rate_limit_storage(self, current_time):
         """Clean up old rate limit entries"""
         hour_ago = current_time - timedelta(hours=1)
-        for client_ip in list(self.rate_limit_storage.keys()):
-            self.rate_limit_storage[client_ip] = [
-                req_time for req_time in self.rate_limit_storage[client_ip]
-                if req_time > hour_ago
-            ]
-            if not self.rate_limit_storage[client_ip]:
-                del self.rate_limit_storage[client_ip]
+        with self._lock:
+            for client_ip in list(self.rate_limit_storage.keys()):
+                self.rate_limit_storage[client_ip] = [
+                    req_time for req_time in self.rate_limit_storage[client_ip]
+                    if req_time > hour_ago
+                ]
+                if not self.rate_limit_storage[client_ip]:
+                    del self.rate_limit_storage[client_ip]
 
 # Input validation utilities
 def validate_chaos_input(data):

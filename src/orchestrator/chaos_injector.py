@@ -688,8 +688,27 @@ def system_status():
 @app.route("/chaos-history")
 def chaos_history():
     try:
-        experiments = ChaosExperiment.query.order_by(ChaosExperiment.start_time.desc()).limit(50).all()
-        return jsonify({"history": [e.to_dict() for e in experiments]})
+        try:
+            page = max(1, int(request.args.get("page", 1)))
+            limit = min(100, max(1, int(request.args.get("limit", 20))))
+        except (ValueError, TypeError):
+            return jsonify({"error": "page and limit must be positive integers"}), 400
+
+        total = ChaosExperiment.query.count()
+        experiments = (
+            ChaosExperiment.query
+            .order_by(ChaosExperiment.start_time.desc())
+            .offset((page - 1) * limit)
+            .limit(limit)
+            .all()
+        )
+        return jsonify({
+            "history": [e.to_dict() for e in experiments],
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": max(1, -(-total // limit)),  # ceiling division
+        })
     except Exception as e:
         logger.error(f"Failed to retrieve chaos history: {e}")
         return jsonify({"history": [], "error": str(e)}), 500
@@ -875,6 +894,54 @@ def cancel_schedule(job_id):
         return jsonify({'message': f'Schedule {job_id} cancelled'})
     except Exception as e:
         return jsonify({'error': str(e)}), 404
+
+
+@app.route("/stream/<int:exp_id>")
+def stream_experiment(exp_id):
+    """Server-Sent Events stream for live experiment status updates."""
+    def generate():
+        terminal_statuses = {'completed', 'failed', 'stopped'}
+        poll_interval = 1.0
+        max_polls = 360  # 6-minute hard cap
+
+        for _ in range(max_polls):
+            try:
+                with app.app_context():
+                    exp = ChaosExperiment.query.get(exp_id)
+                if exp is None:
+                    yield f"data: {json.dumps({'error': f'Experiment {exp_id} not found'})}\n\n"
+                    return
+
+                payload = {
+                    'id': exp.id,
+                    'scenario': exp.scenario,
+                    'status': exp.status,
+                    'intensity': exp.intensity,
+                    'duration': exp.duration,
+                    'start_time': exp.start_time.isoformat() if exp.start_time else None,
+                    'end_time': exp.end_time.isoformat() if exp.end_time else None,
+                    'is_running': exp_id in _active_experiments,
+                    'metrics_after': exp._safe_json_loads(exp.metrics_after) if exp.status in terminal_statuses else None,
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
+
+                if exp.status in terminal_statuses:
+                    return
+            except Exception as e:
+                logger.error(f"SSE stream error for exp {exp_id}: {e}")
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                return
+
+            time.sleep(poll_interval)
+
+        yield f"data: {json.dumps({'error': 'stream timeout'})}\n\n"
+
+    exp = ChaosExperiment.query.get(exp_id)
+    if exp is None:
+        return jsonify({'error': f'Experiment {exp_id} not found'}), 404
+
+    return Response(generate(), mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
 if __name__ == "__main__":

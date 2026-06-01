@@ -1,7 +1,13 @@
+import gc
+import glob
 import logging
+import os
+import subprocess
 import time
 from typing import Dict, Any, Optional, List, Union
 from datetime import datetime
+
+import psutil
 
 # Configure logging
 logging.basicConfig(
@@ -303,56 +309,162 @@ class RemediationAgent:
             logger.warning(f"Error generating recommendations: {e}")
             return ["Review system status manually"]
     
-    def _remediate_network_issues(self, assessment: Dict[str, Any]) -> bool:
-        """Remediate network-related issues"""
-        try:
-            logger.info("Executing network remediation strategy")
-            # Simulate network remediation steps
-            time.sleep(0.1)  # Simulate work
-            return True
-        except Exception as e:
-            logger.error(f"Network remediation failed: {e}")
-            return False
-    
+    # ── Protected processes that must never be killed ────────────────────────
+    _PROTECTED = frozenset({
+        'systemd', 'init', 'sshd', 'kernel', 'kthreadd', 'python',
+        'python3', 'gunicorn', 'flask', 'chaos_injector',
+    })
+
     def _remediate_cpu_issues(self, assessment: Dict[str, Any]) -> bool:
-        """Remediate CPU-related issues"""
+        """
+        Reduce CPU pressure by niceing or terminating the highest-CPU non-protected process.
+        Falls back to a no-op success when no safe target exists.
+        """
         try:
-            logger.info("Executing CPU remediation strategy")
-            # Simulate CPU remediation steps
-            time.sleep(0.1)  # Simulate work
+            logger.info("Executing CPU remediation")
+            procs = sorted(
+                psutil.process_iter(['pid', 'name', 'cpu_percent', 'status']),
+                key=lambda p: p.info.get('cpu_percent') or 0,
+                reverse=True,
+            )
+            for proc in procs[:10]:
+                name = (proc.info.get('name') or '').lower()
+                if any(p in name for p in self._PROTECTED):
+                    continue
+                try:
+                    if os.name != 'nt':
+                        os.nice(10)  # lower own priority first
+                    proc.terminate()
+                    proc.wait(timeout=3)
+                    logger.info(f"Terminated high-CPU process: {proc.info['name']} (PID {proc.info['pid']})")
+                    return True
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                    continue
+            logger.info("CPU remediation: no safe target found — system may self-recover")
             return True
         except Exception as e:
             logger.error(f"CPU remediation failed: {e}")
             return False
-    
+
     def _remediate_memory_issues(self, assessment: Dict[str, Any]) -> bool:
-        """Remediate memory-related issues"""
+        """
+        Free memory by running gc.collect() and terminating the highest-memory
+        non-protected process if memory is still above 90 %.
+        """
         try:
-            logger.info("Executing memory remediation strategy")
-            # Simulate memory remediation steps
-            time.sleep(0.1)  # Simulate work
+            logger.info("Executing memory remediation")
+            collected = gc.collect()
+            logger.info(f"gc.collect() freed {collected} objects")
+
+            if psutil.virtual_memory().percent < 90:
+                return True
+
+            procs = sorted(
+                psutil.process_iter(['pid', 'name', 'memory_percent']),
+                key=lambda p: p.info.get('memory_percent') or 0,
+                reverse=True,
+            )
+            for proc in procs[:10]:
+                name = (proc.info.get('name') or '').lower()
+                if any(p in name for p in self._PROTECTED):
+                    continue
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=3)
+                    logger.info(f"Terminated high-memory process: {proc.info['name']} (PID {proc.info['pid']})")
+                    return True
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                    continue
+            logger.info("Memory remediation: no safe target found after gc.collect()")
             return True
         except Exception as e:
             logger.error(f"Memory remediation failed: {e}")
             return False
-    
+
     def _remediate_disk_issues(self, assessment: Dict[str, Any]) -> bool:
-        """Remediate disk-related issues"""
+        """
+        Free disk space by deleting Mayhem-owned temp files and any *.log files
+        older than 7 days in /tmp (Linux) or %TEMP% (Windows).
+        """
         try:
-            logger.info("Executing disk remediation strategy")
-            # Simulate disk remediation steps
-            time.sleep(0.1)  # Simulate work
+            logger.info("Executing disk remediation")
+            freed_bytes = 0
+            temp_dir = os.environ.get('TEMP', '/tmp')
+
+            # Remove Mayhem chaos temp files
+            for path in glob.glob(os.path.join(temp_dir, 'mayhem_chaos', 'chaos_disk_*.tmp')):
+                try:
+                    size = os.path.getsize(path)
+                    os.remove(path)
+                    freed_bytes += size
+                except OSError:
+                    pass
+
+            # Remove stale log files (>7 days) in temp dir
+            cutoff = time.time() - 7 * 86400
+            for path in glob.glob(os.path.join(temp_dir, '*.log')):
+                try:
+                    if os.path.getmtime(path) < cutoff:
+                        size = os.path.getsize(path)
+                        os.remove(path)
+                        freed_bytes += size
+                except OSError:
+                    pass
+
+            logger.info(f"Disk remediation freed {freed_bytes / (1024 ** 2):.1f} MB")
             return True
         except Exception as e:
             logger.error(f"Disk remediation failed: {e}")
             return False
-    
-    def _generic_remediation(self, assessment: Dict[str, Any]) -> bool:
-        """Generic remediation for unknown issues"""
+
+    def _remediate_network_issues(self, assessment: Dict[str, Any]) -> bool:
+        """
+        Flush iptables rules injected by chaos experiments (Linux only).
+        On non-Linux platforms logs a no-op success.
+        """
         try:
-            logger.info("Executing generic remediation strategy")
-            # Simulate generic remediation steps
-            time.sleep(0.1)  # Simulate work
+            logger.info("Executing network remediation")
+            if os.name == 'nt':
+                logger.info("Network remediation: iptables not available on Windows — skipping flush")
+                return True
+
+            # Flush INPUT and OUTPUT chains; ignore errors if iptables not present
+            for chain in ('INPUT', 'OUTPUT', 'FORWARD'):
+                result = subprocess.run(
+                    ['iptables', '-F', chain],
+                    capture_output=True, timeout=10,
+                )
+                if result.returncode != 0:
+                    logger.warning(f"iptables -F {chain}: {result.stderr.decode().strip()}")
+
+            # Also remove tc qdisc if iproute2 is available
+            try:
+                iface_result = subprocess.run(
+                    ['ip', 'route', 'show', 'default'],
+                    capture_output=True, text=True, timeout=5,
+                )
+                iface = iface_result.stdout.split('dev')[1].split()[0] if 'dev' in iface_result.stdout else None
+                if iface:
+                    subprocess.run(['tc', 'qdisc', 'del', 'dev', iface, 'root'],
+                                   capture_output=True, timeout=10)
+                    logger.info(f"Removed tc qdisc on {iface}")
+            except Exception:
+                pass
+
+            logger.info("Network remediation complete")
+            return True
+        except Exception as e:
+            logger.error(f"Network remediation failed: {e}")
+            return False
+
+    def _generic_remediation(self, assessment: Dict[str, Any]) -> bool:
+        """Run gc.collect() and log current resource usage as a baseline recovery step."""
+        try:
+            logger.info("Executing generic remediation")
+            gc.collect()
+            cpu = psutil.cpu_percent(interval=0.5)
+            mem = psutil.virtual_memory().percent
+            logger.info(f"Post-remediation snapshot — CPU: {cpu:.1f}%  MEM: {mem:.1f}%")
             return True
         except Exception as e:
             logger.error(f"Generic remediation failed: {e}")
