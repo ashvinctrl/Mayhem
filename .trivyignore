@@ -1,0 +1,6 @@
+# .trivyignore — suppress known false positives or accepted risks
+# Format: one CVE ID or Trivy finding ID per line
+# Example:
+#   CVE-2023-12345   # accepted risk: only reachable in test environments
+#
+# Keep this file as short as possible — prefer fixing the underlying issue.

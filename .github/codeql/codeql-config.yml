@@ -1,0 +1,14 @@
+name: "Mayhem CodeQL Config"
+
+# Use the extended security + quality query suite instead of the default
+# minimal set — catches injection, path traversal, SSRF, insecure deserialization, etc.
+queries:
+  - uses: security-and-quality
+
+# Don't waste scan time on test fixtures and vendored code
+paths-ignore:
+  - src/tests
+  - "**/__pycache__"
+  - "**/*.pyc"
+  - htmlcov
+  - .venv
