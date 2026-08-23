@@ -11,62 +11,69 @@ env:
   IMAGE_NAME: ${{ github.repository }}/chaos-orchestrator
 
 jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 1. Tests, linting, and dependency audit
+  # ─────────────────────────────────────────────────────────────────────────────
   test:
     name: Test & Quality Checks
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
+    - uses: actions/checkout@v4
+
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.9'
-        
-    - name: Cache dependencies
+
+    - name: Cache pip
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-          
+        restore-keys: ${{ runner.os }}-pip-
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest pytest-cov flake8 black isort safety bandit
-        
+        pip install pytest pytest-cov flake8 black isort bandit pip-audit
+
     - name: Code formatting check
       run: |
         black --check --diff src/
         isort --check-only --diff src/
-        
+
     - name: Lint with flake8
       run: |
         flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
         flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
-        
-    - name: Security check with bandit
+
+    # bandit: fail on MEDIUM+ severity, MEDIUM+ confidence
+    # -ll = only report medium/high severity; -ii = only medium/high confidence
+    - name: SAST — bandit
       run: |
-        bandit -r src/ -f json -o bandit-report.json
-        
-    - name: Dependency security check
+        bandit -r src/ -ll -ii -f json -o bandit-report.json
+      continue-on-error: false
+
+    # pip-audit replaces the deprecated `safety check`
+    # Fails if any known vulnerability is found in installed packages
+    - name: Dependency audit — pip-audit
       run: |
-        safety check --json --output safety-report.json
-        
+        pip-audit --format json --output pip-audit-report.json
+      continue-on-error: false
+
     - name: Run unit tests
       run: |
         pytest src/tests/ -v --cov=src --cov-report=xml --cov-report=html
-        
+
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
         flags: unittests
         name: codecov-umbrella
-        
+
     - name: Upload test artifacts
       uses: actions/upload-artifact@v4
       if: always()
@@ -75,47 +82,123 @@ jobs:
         path: |
           htmlcov/
           bandit-report.json
-          safety-report.json
+          pip-audit-report.json
 
-  docker-build:
-    name: Docker Build & Security Scan
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 2. Security analysis — CodeQL + Trivy filesystem scan
+  #    Runs in parallel with docker-build; no Docker needed here.
+  # ─────────────────────────────────────────────────────────────────────────────
+  security-scan:
+    name: Security Analysis
     runs-on: ubuntu-latest
     needs: test
-    
+    permissions:
+      actions: read
+      contents: read
+      security-events: write   # required to upload SARIF to GitHub Security tab
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
+    - uses: actions/checkout@v4
+
+    # ── CodeQL ────────────────────────────────────────────────────────────────
+    # Uses security-and-quality query suite (see .github/codeql/codeql-config.yml)
+    # to detect injection, SSRF, path traversal, insecure deserialization, etc.
+    - name: CodeQL — initialize
+      uses: github/codeql-action/init@v3
+      with:
+        languages: python
+        config-file: .github/codeql/codeql-config.yml
+
+    - name: CodeQL — autobuild
+      uses: github/codeql-action/autobuild@v3
+
+    - name: CodeQL — analyze
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:python"
+
+    # ── Trivy filesystem scan ─────────────────────────────────────────────────
+    # Scans the repo source tree for:
+    #   - hardcoded secrets (API keys, tokens, passwords)
+    #   - misconfigured Dockerfiles, docker-compose files, k8s manifests
+    # Does NOT need a Docker build — runs directly on checkout.
+    - name: Trivy — filesystem (secrets + misconfigs)
+      uses: aquasecurity/trivy-action@0.28.0
+      with:
+        scan-type: fs
+        scan-ref: .
+        scanners: secret,misconfig
+        format: sarif
+        output: trivy-fs.sarif
+        severity: CRITICAL,HIGH,MEDIUM
+        trivyignores: .trivyignore
+
+    - name: Upload Trivy filesystem results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: trivy-fs.sarif
+        category: trivy-filesystem
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 3. Docker build + Trivy image scan
+  # ─────────────────────────────────────────────────────────────────────────────
+  docker-build:
+    name: Docker Build & Image Scan
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+    - uses: actions/checkout@v4
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-      
+
     - name: Build Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
         push: false
+        load: true
         tags: ${{ env.IMAGE_NAME }}:test
         cache-from: type=gha
         cache-to: type=gha,mode=max
-        
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@0.20.0
+
+    # Trivy image scan:
+    #   - scanners: vuln (OS + app CVEs) + secret + misconfig
+    #   - severity gate: CRITICAL and HIGH only
+    #   - ignore-unfixed: don't fail on vulnerabilities with no upstream fix yet
+    #   - exit-code 1: actually fails the job if unfixed CRITICAL/HIGH CVEs found
+    - name: Trivy — image scan (CVEs + secrets + misconfigs)
+      uses: aquasecurity/trivy-action@0.28.0
       with:
         image-ref: ${{ env.IMAGE_NAME }}:test
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-        
-    - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: 'trivy-results.sarif'
+        scanners: vuln,secret,misconfig
+        format: sarif
+        output: trivy-image.sarif
+        severity: CRITICAL,HIGH
+        ignore-unfixed: true
+        exit-code: '1'
+        trivyignores: .trivyignore
 
+    - name: Upload Trivy image results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()   # upload even if the scan step failed so results appear in Security tab
+      with:
+        sarif_file: trivy-image.sarif
+        category: trivy-image
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 4. Integration tests (needs docker-build to confirm image is healthy)
+  # ─────────────────────────────────────────────────────────────────────────────
   integration-test:
     name: Integration Tests
     runs-on: ubuntu-latest
     needs: docker-build
-    
+
     services:
       postgres:
         image: postgres:13
@@ -127,76 +210,50 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-          
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Docker Compose
+    - uses: actions/checkout@v4
+
+    - name: Start stack
       run: |
-        docker-compose -f docker-compose.yaml up -d
-        echo "Waiting for chaos-orchestrator to become healthy..."
+        docker compose -f docker-compose.yaml up -d
         timeout 120 bash -c 'until curl -sf http://localhost:5000/health; do sleep 3; done'
-        
+
     - name: Run integration tests
+      run: python -m pytest src/tests/test_integration.py -v
+
+    - name: Smoke-test API endpoints
       run: |
-        python -m pytest src/tests/test_integration.py -v
-        
-    - name: Test API endpoints
-      run: |
-        # Test health endpoint
         curl -f http://localhost:5000/health
-        
-        # Test metrics endpoint
         curl -f http://localhost:5000/metrics
-        
-        # Test scenarios endpoint
         curl -f http://localhost:5000/scenarios
-        
+
     - name: Cleanup
       if: always()
-      run: docker-compose down
+      run: docker compose down
 
-  security-scan:
-    name: Security Analysis
-    runs-on: ubuntu-latest
-    needs: test
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Run CodeQL Analysis
-      uses: github/codeql-action/init@v3
-      with:
-        languages: python
-
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@v3
-
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
-
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 5. Build & push (main branch only, all gates must pass)
+  # ─────────────────────────────────────────────────────────────────────────────
   build-and-push:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
     needs: [test, integration-test, security-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
+    - uses: actions/checkout@v4
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-      
+
     - name: Log in to Container Registry
       uses: docker/login-action@v3
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-        
+
     - name: Extract metadata
       id: meta
       uses: docker/metadata-action@v5
@@ -207,7 +264,7 @@ jobs:
           type=ref,event=pr
           type=sha,prefix={{branch}}-
           type=raw,value=latest,enable={{is_default_branch}}
-          
+
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
@@ -218,39 +275,38 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 6. Deploy jobs (unchanged — kept as-is)
+  # ─────────────────────────────────────────────────────────────────────────────
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: build-and-push
     if: github.ref == 'refs/heads/develop'
     environment: staging
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
+    - uses: actions/checkout@v4
+
     - name: Set up kubectl
       uses: azure/setup-kubectl@v3
       with:
         version: 'latest'
-        
+
     - name: Configure kubectl
       run: |
         echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > kubeconfig
         export KUBECONFIG=kubeconfig
-        
+
     - name: Deploy to staging
       run: |
         export KUBECONFIG=kubeconfig
         export IMAGE_TAG=${{ github.sha }}
         ./scripts/deploy_production.sh
-        
+
     - name: Run smoke tests
       run: |
-        # Wait for deployment
         kubectl wait --for=condition=available --timeout=300s deployment/chaos-orchestrator -n chaos-engineering-staging
-        
-        # Run basic smoke tests
         STAGING_URL="${{ secrets.STAGING_URL }}"
         curl -f "${STAGING_URL}/health"
         curl -f "${STAGING_URL}/scenarios"
@@ -261,44 +317,38 @@ jobs:
     needs: build-and-push
     if: github.ref == 'refs/heads/main'
     environment: production
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
+    - uses: actions/checkout@v4
+
     - name: Set up kubectl
       uses: azure/setup-kubectl@v3
       with:
         version: 'latest'
-        
+
     - name: Configure kubectl
       run: |
         echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > kubeconfig
         export KUBECONFIG=kubeconfig
-        
+
     - name: Deploy to production
       run: |
         export KUBECONFIG=kubeconfig
         export IMAGE_TAG=${{ github.sha }}
         export REGISTRY=${{ env.REGISTRY }}
         ./scripts/deploy_production.sh
-        
+
     - name: Run production health checks
       run: |
-        # Wait for deployment
         kubectl wait --for=condition=available --timeout=300s deployment/chaos-orchestrator -n chaos-engineering
-        
-        # Run comprehensive health checks
         PRODUCTION_URL="${{ secrets.PRODUCTION_URL }}"
         curl -f "${PRODUCTION_URL}/health"
         curl -f "${PRODUCTION_URL}/scenarios"
-        
-        # Test with API key
         curl -f -H "X-API-Key: ${{ secrets.CHAOS_API_KEY }}" \
           -H "Content-Type: application/json" \
           -d '{"scenario": "cpu_spike", "duration": 1, "intensity": "low"}' \
           "${PRODUCTION_URL}/inject"
-          
+
     - name: Notify deployment success
       uses: 8398a7/action-slack@v3
       with:
@@ -312,7 +362,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test, integration-test, security-scan, build-and-push, deploy-production]
     if: failure()
-    
+
     steps:
     - name: Notify failure
       uses: 8398a7/action-slack@v3
