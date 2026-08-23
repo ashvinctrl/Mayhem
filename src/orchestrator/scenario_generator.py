@@ -1,11 +1,10 @@
 import logging
 from collections import Counter
-from typing import Dict, List, Any, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -104,14 +103,35 @@ class ScenarioGenerator:
     def __init__(self):
         self.max_scenarios = 50
         self.default_scenarios = [
-            {"scenario_id": "cpu_spike",       "name": "CPU Spike",       "details": "Basic CPU stress test",        "priority_score": 0.3, "suggested_intensity": "medium"},
-            {"scenario_id": "memory_leak",     "name": "Memory Leak",     "details": "Basic memory stress test",     "priority_score": 0.3, "suggested_intensity": "medium"},
-            {"scenario_id": "network_latency", "name": "Network Latency", "details": "Basic network degradation test","priority_score": 0.3, "suggested_intensity": "medium"},
+            {
+                "scenario_id": "cpu_spike",
+                "name": "CPU Spike",
+                "details": "Basic CPU stress test",
+                "priority_score": 0.3,
+                "suggested_intensity": "medium",
+            },
+            {
+                "scenario_id": "memory_leak",
+                "name": "Memory Leak",
+                "details": "Basic memory stress test",
+                "priority_score": 0.3,
+                "suggested_intensity": "medium",
+            },
+            {
+                "scenario_id": "network_latency",
+                "name": "Network Latency",
+                "details": "Basic network degradation test",
+                "priority_score": 0.3,
+                "suggested_intensity": "medium",
+            },
         ]
         logger.info("ScenarioGenerator initialized")
-    
-    def generate_scenarios(self, past_failures: Optional[List[Union[str, Dict]]] = None,
-                          system_metrics: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+
+    def generate_scenarios(
+        self,
+        past_failures: Optional[List[Union[str, Dict]]] = None,
+        system_metrics: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Generate and rank chaos scenarios from past failures and live system metrics.
 
@@ -135,7 +155,9 @@ class ScenarioGenerator:
                     if isinstance(failure, str):
                         text = failure
                     elif isinstance(failure, dict):
-                        text = failure.get('description', failure.get('message', str(failure)))
+                        text = failure.get(
+                            "description", failure.get("message", str(failure))
+                        )
                     else:
                         continue
                     frequency[_classify_failure(text)] += 1
@@ -156,31 +178,49 @@ class ScenarioGenerator:
             # Boost or add scenarios that have elevated live metrics
             for scenario_id, mscore in metric_scores.items():
                 if mscore > 0.1:  # only if metric is meaningfully elevated
-                    candidates[scenario_id] = max(candidates.get(scenario_id, 0.0), mscore)
+                    candidates[scenario_id] = max(
+                        candidates.get(scenario_id, 0.0), mscore
+                    )
 
             # If nothing was generated, emit the three defaults at low priority
             if not candidates:
-                logger.info("No signals from failures or metrics — returning default scenarios")
+                logger.info(
+                    "No signals from failures or metrics — returning default scenarios"
+                )
                 return self.default_scenarios.copy()
 
             # ── 4. Build output list sorted by score descending ───────────────
             results: List[Dict[str, Any]] = []
-            for scenario_id, score in sorted(candidates.items(), key=lambda x: x[1], reverse=True):
-                label = _SCENARIO_LABELS.get(scenario_id, scenario_id.replace("_", " ").title())
+            for scenario_id, score in sorted(
+                candidates.items(), key=lambda x: x[1], reverse=True
+            ):
+                label = _SCENARIO_LABELS.get(
+                    scenario_id, scenario_id.replace("_", " ").title()
+                )
                 details_parts = []
                 if frequency.get(scenario_id):
-                    details_parts.append(f"seen {frequency[scenario_id]}x in past failures")
+                    details_parts.append(
+                        f"seen {frequency[scenario_id]}x in past failures"
+                    )
                 if scenario_id in metric_scores and metric_scores[scenario_id] > 0.1:
-                    details_parts.append(f"live metric score {metric_scores[scenario_id]:.0%}")
-                results.append({
-                    "scenario_id": scenario_id,
-                    "name": label,
-                    "details": "; ".join(details_parts) if details_parts else f"Simulate {label}",
-                    "priority_score": round(score, 3),
-                    "suggested_intensity": _suggest_intensity(score),
-                })
+                    details_parts.append(
+                        f"live metric score {metric_scores[scenario_id]:.0%}"
+                    )
+                results.append(
+                    {
+                        "scenario_id": scenario_id,
+                        "name": label,
+                        "details": (
+                            "; ".join(details_parts)
+                            if details_parts
+                            else f"Simulate {label}"
+                        ),
+                        "priority_score": round(score, 3),
+                        "suggested_intensity": _suggest_intensity(score),
+                    }
+                )
 
-            results = results[:self.max_scenarios]
+            results = results[: self.max_scenarios]
             logger.info(f"Generated {len(results)} ranked chaos scenarios")
             return results
 
@@ -188,8 +228,11 @@ class ScenarioGenerator:
             logger.error(f"Critical error in scenario generation: {e}")
             return self.default_scenarios.copy()
 
-    def evolve_scenarios(self, scenarios: Optional[List[Dict[str, Any]]] = None,
-                         feedback: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    def evolve_scenarios(
+        self,
+        scenarios: Optional[List[Dict[str, Any]]] = None,
+        feedback: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Evolve existing scenarios using experiment feedback.
 
@@ -210,22 +253,32 @@ class ScenarioGenerator:
             impact_norm = min(1.0, impact_score / 10.0)
 
             evolved: List[Dict[str, Any]] = []
-            for scenario in scenarios[:self.max_scenarios]:
+            for scenario in scenarios[: self.max_scenarios]:
                 try:
-                    if not isinstance(scenario, dict) or 'name' not in scenario:
+                    if not isinstance(scenario, dict) or "name" not in scenario:
                         continue
                     s = scenario.copy()
                     current_score = float(s.get("priority_score", 0.3))
 
                     if feedback_result == "success":
                         # Experiment exposed a weakness — raise priority and push intensity up
-                        s["priority_score"] = round(min(1.0, current_score + impact_norm * 0.2), 3)
-                        s["suggested_intensity"] = _suggest_intensity(s["priority_score"])
-                        s["details"] = s.get("details", "") + " [priority raised after successful chaos]"
+                        s["priority_score"] = round(
+                            min(1.0, current_score + impact_norm * 0.2), 3
+                        )
+                        s["suggested_intensity"] = _suggest_intensity(
+                            s["priority_score"]
+                        )
+                        s["details"] = (
+                            s.get("details", "")
+                            + " [priority raised after successful chaos]"
+                        )
                     elif feedback_result == "failure":
                         # Experiment had no effect — lower priority, suggest alternative intensity
                         s["priority_score"] = round(max(0.0, current_score - 0.1), 3)
-                        s["details"] = s.get("details", "") + " [deprioritised — previous run had no impact]"
+                        s["details"] = (
+                            s.get("details", "")
+                            + " [deprioritised — previous run had no impact]"
+                        )
                     evolved.append(s)
                 except Exception as e:
                     logger.warning(f"Error evolving scenario: {e}")
@@ -234,16 +287,20 @@ class ScenarioGenerator:
             for key, value in feedback.items():
                 if key.startswith("add_") and value:
                     scenario_id = key[4:]
-                    label = _SCENARIO_LABELS.get(scenario_id, scenario_id.replace("_", " ").title())
-                    evolved.append({
-                        "scenario_id": scenario_id,
-                        "name": label,
-                        "details": "Added via feedback request",
-                        "priority_score": 0.5,
-                        "suggested_intensity": "medium",
-                    })
+                    label = _SCENARIO_LABELS.get(
+                        scenario_id, scenario_id.replace("_", " ").title()
+                    )
+                    evolved.append(
+                        {
+                            "scenario_id": scenario_id,
+                            "name": label,
+                            "details": "Added via feedback request",
+                            "priority_score": 0.5,
+                            "suggested_intensity": "medium",
+                        }
+                    )
 
-            evolved = evolved[:self.max_scenarios]
+            evolved = evolved[: self.max_scenarios]
             # Re-sort by priority after mutations
             evolved.sort(key=lambda x: x.get("priority_score", 0), reverse=True)
 
