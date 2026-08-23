@@ -1,0 +1,4 @@
+[tool.isort]
+# Without this, isort's default multi-line output disagrees with black and the
+# two checks in the CI quality gate cannot both pass on the same tree.
+profile = "black"
