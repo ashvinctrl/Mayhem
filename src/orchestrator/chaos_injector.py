@@ -377,8 +377,11 @@ def inject():
                 temp_files = []
                 try:
                     size_mb = {"low": 50, "medium": 100, "high": 200}[intensity]
+                    # Cross-platform temp root. The disk-stress scenario
+                    # deliberately fills a temp directory it creates and owns.
                     temp_dir = os.path.join(
-                        os.environ.get("TEMP", "/tmp"), "mayhem_chaos"
+                        os.environ.get("TEMP", "/tmp"),  # nosec B108
+                        "mayhem_chaos",
                     )
                     os.makedirs(temp_dir, exist_ok=True)
                     for i in range(size_mb):
@@ -1206,4 +1209,6 @@ def stream_experiment(exp_id):
 
 if __name__ == "__main__":
     print("\n[Mayhem] Starting the orchestrator... Hold on to your packets!\n")
-    app.run(host="0.0.0.0", port=5000)
+    # Dev entry point for a containerized service: binding all interfaces
+    # inside the container is intended.
+    app.run(host="0.0.0.0", port=5000)  # nosec B104

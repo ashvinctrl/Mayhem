@@ -445,7 +445,9 @@ class RemediationAgent:
         try:
             logger.info("Executing disk remediation")
             freed_bytes = 0
-            temp_dir = os.environ.get("TEMP", "/tmp")
+            # Cross-platform temp root, used only to locate the mayhem_chaos
+            # files this tool created.
+            temp_dir = os.environ.get("TEMP", "/tmp")  # nosec B108
 
             # Remove Mayhem chaos temp files
             for path in glob.glob(
